@@ -1,0 +1,110 @@
+settings: 512x512 quality=Best steps=50 guidance=3.0 shift=5.0 skip22=true seed=42
+prompt: A red fox sitting in fresh snow, golden hour, photograph
+[    0.1s +   0.1s] Reading your prompt footprint=0.00 GiB
+[    3.0s +   2.9s] Reading prompt · layer 1 of 32 footprint=0.11 GiB
+[   11.3s +   8.2s] Reading prompt · layer 2 of 32 footprint=0.28 GiB
+[   12.2s +   0.9s] Reading prompt · layer 3 of 32 footprint=0.27 GiB
+[   12.8s +   0.6s] Reading prompt · layer 4 of 32 footprint=0.27 GiB
+[   15.3s +   2.5s] Reading prompt · layer 5 of 32 footprint=0.41 GiB
+[   16.1s +   0.8s] Reading prompt · layer 6 of 32 footprint=0.35 GiB
+[   16.7s +   0.6s] Reading prompt · layer 7 of 32 footprint=0.28 GiB
+[   17.3s +   0.6s] Reading prompt · layer 8 of 32 footprint=0.28 GiB
+[   17.8s +   0.5s] Reading prompt · layer 9 of 32 footprint=0.41 GiB
+[   18.5s +   0.6s] Reading prompt · layer 10 of 32 footprint=0.28 GiB
+[   19.2s +   0.7s] Reading prompt · layer 11 of 32 footprint=0.28 GiB
+[   19.9s +   0.7s] Reading prompt · layer 12 of 32 footprint=0.28 GiB
+[   20.6s +   0.7s] Reading prompt · layer 13 of 32 footprint=0.36 GiB
+[   21.4s +   0.9s] Reading prompt · layer 14 of 32 footprint=0.28 GiB
+[   22.2s +   0.7s] Reading prompt · layer 15 of 32 footprint=0.28 GiB
+[   22.9s +   0.7s] Reading prompt · layer 16 of 32 footprint=0.35 GiB
+[   23.4s +   0.5s] Reading prompt · layer 17 of 32 footprint=0.41 GiB
+[   24.1s +   0.6s] Reading prompt · layer 18 of 32 footprint=0.28 GiB
+[   24.9s +   0.8s] Reading prompt · layer 19 of 32 footprint=0.28 GiB
+[   25.5s +   0.6s] Reading prompt · layer 20 of 32 footprint=0.28 GiB
+[   26.0s +   0.5s] Reading prompt · layer 21 of 32 footprint=0.39 GiB
+[   26.8s +   0.7s] Reading prompt · layer 22 of 32 footprint=0.28 GiB
+[   27.4s +   0.6s] Reading prompt · layer 23 of 32 footprint=0.28 GiB
+[   28.1s +   0.7s] Reading prompt · layer 24 of 32 footprint=0.28 GiB
+[   28.6s +   0.5s] Reading prompt · layer 25 of 32 footprint=0.39 GiB
+[   29.2s +   0.5s] Reading prompt · layer 26 of 32 footprint=0.28 GiB
+[   29.8s +   0.6s] Reading prompt · layer 27 of 32 footprint=0.28 GiB
+[   30.3s +   0.5s] Reading prompt · layer 28 of 32 footprint=0.28 GiB
+[   30.8s +   0.5s] Reading prompt · layer 29 of 32 footprint=0.41 GiB
+[   31.4s +   0.6s] Reading prompt · layer 30 of 32 footprint=0.28 GiB
+[   32.1s +   0.7s] Reading prompt · layer 31 of 32 footprint=0.28 GiB
+[   32.8s +   0.7s] Reading prompt · layer 32 of 32 footprint=0.28 GiB
+[   36.4s +   3.6s] Preparing prompt for the image model footprint=0.86 GiB
+[   40.7s +   4.3s] Step 1 of 50 footprint=0.88 GiB
+[   88.6s +  47.9s] Step 2 of 50 footprint=0.97 GiB
+[  130.4s +  41.7s] Step 3 of 50 footprint=0.97 GiB
+[  168.3s +  38.0s] Step 4 of 50 footprint=0.99 GiB
+[  206.1s +  37.8s] Step 5 of 50 footprint=0.99 GiB
+[  242.3s +  36.2s] Step 6 of 50 footprint=0.99 GiB
+[  279.8s +  37.5s] Step 7 of 50 footprint=0.99 GiB
+[  318.6s +  38.7s] Step 8 of 50 footprint=0.99 GiB
+[  354.1s +  35.5s] Step 9 of 50 footprint=0.99 GiB
+[  391.1s +  37.0s] Step 10 of 50 footprint=0.99 GiB
+[  426.1s +  35.1s] Step 11 of 50 footprint=0.99 GiB
+[  461.0s +  34.9s] Step 12 of 50 footprint=0.99 GiB
+[  494.4s +  33.4s] Step 13 of 50 footprint=0.99 GiB
+[  520.9s +  26.5s] Step 14 of 50 footprint=0.99 GiB
+[  552.2s +  31.4s] Step 15 of 50 footprint=0.99 GiB
+[  583.4s +  31.2s] Step 16 of 50 footprint=0.99 GiB
+[  612.1s +  28.7s] Step 17 of 50 footprint=0.99 GiB
+[  639.9s +  27.7s] Step 18 of 50 footprint=0.99 GiB
+[  667.8s +  27.9s] Step 19 of 50 footprint=0.99 GiB
+[  699.7s +  31.9s] Step 20 of 50 footprint=0.99 GiB
+[  728.1s +  28.4s] Step 21 of 50 footprint=0.99 GiB
+[  756.5s +  28.3s] Step 22 of 50 footprint=0.99 GiB
+[  784.8s +  28.4s] Step 23 of 50 footprint=0.99 GiB
+[  811.9s +  27.1s] Step 24 of 50 footprint=0.99 GiB
+[  839.6s +  27.7s] Step 25 of 50 footprint=0.99 GiB
+[  867.6s +  28.0s] Step 26 of 50 footprint=0.99 GiB
+[  895.1s +  27.5s] Step 27 of 50 footprint=0.99 GiB
+[  923.0s +  27.9s] Step 28 of 50 footprint=0.99 GiB
+[  949.9s +  27.0s] Step 29 of 50 footprint=0.99 GiB
+[  981.7s +  31.8s] Step 30 of 50 footprint=0.99 GiB
+[ 1010.1s +  28.3s] Step 31 of 50 footprint=0.99 GiB
+[ 1038.1s +  28.1s] Step 32 of 50 footprint=0.99 GiB
+[ 1066.2s +  28.0s] Step 33 of 50 footprint=0.99 GiB
+[ 1094.4s +  28.3s] Step 34 of 50 footprint=0.99 GiB
+[ 1122.0s +  27.5s] Step 35 of 50 footprint=0.99 GiB
+[ 1151.1s +  29.1s] Step 36 of 50 footprint=0.99 GiB
+[ 1179.6s +  28.5s] Step 37 of 50 footprint=0.99 GiB
+[ 1207.9s +  28.3s] Step 38 of 50 footprint=0.99 GiB
+[ 1234.5s +  26.6s] Step 39 of 50 footprint=0.99 GiB
+[ 1261.6s +  27.1s] Step 40 of 50 footprint=0.99 GiB
+[ 1288.6s +  27.0s] Step 41 of 50 footprint=0.99 GiB
+[ 1316.9s +  28.3s] Step 42 of 50 footprint=0.99 GiB
+[ 1345.6s +  28.7s] Step 43 of 50 footprint=0.99 GiB
+[ 1374.1s +  28.4s] Step 44 of 50 footprint=0.99 GiB
+[ 1402.8s +  28.7s] Step 45 of 50 footprint=0.99 GiB
+[ 1431.3s +  28.6s] Step 46 of 50 footprint=0.99 GiB
+[ 1460.4s +  29.1s] Step 47 of 50 footprint=0.99 GiB
+[ 1489.4s +  29.0s] Step 48 of 50 footprint=0.99 GiB
+[ 1518.5s +  29.1s] Step 49 of 50 footprint=0.99 GiB
+[ 1547.5s +  29.0s] Step 50 of 50 footprint=0.99 GiB
+[ 1579.3s +  31.9s] Decoding image footprint=0.58 GiB
+[ 1582.2s +   2.8s] Decoding image · stage 1 of 4 footprint=0.84 GiB
+[ 1582.7s +   0.6s] Decoding image · stage 2 of 4 footprint=0.86 GiB
+[ 1584.7s +   1.9s] Decoding image · stage 3 of 4 footprint=1.02 GiB
+[ 1586.9s +   2.2s] Decoding image · stage 4 of 4 footprint=1.23 GiB
+DONE total=1589.5s
+peak process footprint (50 ms sampling): 1.62 GiB
+MLX peak active memory: 1.02 GiB
+     1589.93 real        46.81 user       628.18 sys
+           620118016  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            15260136  page reclaims
+                 904  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+               35127  voluntary context switches
+              260540  involuntary context switches
+          1742278336  peak memory footprint
