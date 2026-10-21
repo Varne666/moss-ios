@@ -1,13 +1,15 @@
 # Moss iOS
 
-An experimental native SwiftUI iPhone app implementing on-device MOSS-Image-Base inference with MLX Swift. **This source has not been compiled with Xcode or tested on a physical iPhone in the authoring environment. It is not a verified working IPA.** The included GitHub workflow performs Apple compilation and reference tests before producing an unsigned IPA. A physical-device image test remains necessary afterward.
+An experimental native SwiftUI iPhone app implementing on-device MOSS-Image-Base inference with MLX Swift.
 
-For the nontechnical installation guide, open **START-HERE.html** in the delivered package. No source editing or Mac is required for that route. See **INSTALL-ON-IPHONE.txt** after the build.
+**Status (21 October 2026):** the app compiles with Xcode 26.6 (iOS 26.5 SDK) on GitHub's macOS 26 runners, its unit tests pass on an iPhone simulator, and the unsigned IPA is produced by `.github/workflows/build.yml`. The app's engine sources, run on Apple silicon (a GitHub macOS runner) through the `MossCLI` harness with the real downloaded weights, produce correct images. It has **not** yet been run on a physical iPhone; see `VALIDATION.md`.
+
+See **INSTALL-ON-IPHONE.txt** for installation with Signulous.
 
 ## Included
 
 - Swift implementation of Qwen3.5 text encoding, byte-level BPE, 42-layer MOSS transformer, the snapped flow-matching Euler schedule, CFG and negative layer-22 skip, CPU float32 seeded noise, and the FLUX.2 small FP32 decoder.
-- Layer-by-layer weight loading. Only embedding rows used by the prompt are read. The text encoder finishes before transformer loading; transformer layers finish before decoder loading. Intermediate embeddings and latents remain, not the earlier component's weights.
+- Layer-by-layer weight loading. Only embedding rows used by the prompt are read. Each text-encoder layer is read once and applied to both the prompt and the negative prompt; each transformer block is read once per sampling step and applied to both guidance branches. The non-layer transformer weights (~0.44 GB), text-embedder output and RoPE tables are computed once per image.
 - Existing pinned MLX weights, verified with SHA-256; background downloads with resume data, folder selection/bookmarks, import, movement and deletion.
 - Native prompt and JSON-layout input, negative prompt, aspect ratios, custom dimensions, presets, seed and advanced settings, sequential batches, cancellation, thermal throttling and interruption recovery messages.
 - Persistent PNG gallery with embedded JSON metadata, favorites, settings reuse, zoom, Photos export, copying, sharing and bulk actions.
@@ -34,13 +36,13 @@ Best uses 50 steps, guidance 3, shift 5, and negative-only layer-22 skip. Balanc
 
 8-bit image weights and 6-bit text weights are approximations. No measured percentage of image-quality loss is available from this project. The distilled adapter with these quantized weights is experimental. Numerical and image parity with the full-precision PyTorch pipeline are not established.
 
-There is no trustworthy seconds-per-image measurement on this phone. Streaming the transformer requires approximately 549 GB of logical tensor reads for 50 steps with CFG, or about 53 GB for 8 steps with its adapter and no CFG. Storage caches can alter physical reads. Compute, thermal state, prompt length, and storage speed also matter. Expect a potentially long wait; the app estimates remaining sampling time after the first complete step. It does not show invented timings or a fake intermediate image.
+There is no seconds-per-image measurement on an iPhone yet. On a GitHub macOS runner VM (3-core M1, paravirtualised GPU, 7 GB RAM) a 512 × 512 Best image took 26.5 minutes, about 29 s per step, mostly storage reads. Streaming the transformer reads about 5.05 GB of block weights per sampling step (about 253 GB for 50 steps, 101 GB for 20), or about 6.2 GB per step with the Fast adapter (about 50 GB for 8 steps). Storage caches can alter physical reads. Compute, thermal state, prompt length, and storage speed also matter. Expect a potentially long wait; the app estimates remaining sampling time after the first complete step. It does not show invented timings or a fake intermediate image.
 
 ## Memory limits
 
 The default is 512 × 512. Try 768 only after a successful smaller generation. 1024 × 1024 is experimental. The UI accepts multiples of 16, dimensions from 256 to 1536 and a maximum of 1,048,576 total pixels. Long prompts are rejected above 1,024 tokens for phone memory, rather than silently truncated. The tokenizer supports the model's 4,096-token format, but the phone guard is intentionally tighter. Prompt text is stored unchanged; official chat-template formatting trims outer whitespace and uses NFC tokenization.
 
-Weight sizes alone do not predict peak RAM. The transformer has about 439 MB of shared/refiner weights plus roughly 120 MB per streamed block; the adapter adds about 28 MB per block. Text encoder blocks are streamed and its 826 MB vocabulary table is never loaded wholesale. The decoder has about 112 MB of weights but its full-resolution FP32 activations can be much larger. Planning budgets are roughly 1–2 GB for short-prompt encoding, 2–4 GB for sampling, and 1–3 GB for 512–1024 decoding, including temporary arrays. **These are unmeasured planning ranges, not confirmed peaks or guaranteed limits.** File buffers, lazy graphs and Metal allocations may raise them.
+Weight sizes alone do not predict peak RAM. The transformer has about 439 MB of shared/refiner weights plus roughly 120 MB per streamed block; the adapter adds about 28 MB per block. Text encoder blocks are streamed and its 826 MB vocabulary table is never loaded wholesale. The decoder has about 112 MB of weights but its full-resolution FP32 activations can be much larger. Measured on the macOS harness: peak process footprint 1.62 GiB for a complete 512 × 512 Best image (see `VALIDATION.md` for other sizes). iOS memory accounting differs from macOS, so these are indications, not iPhone guarantees. File buffers, lazy graphs and Metal allocations may raise them.
 
 The app requests increased-memory-limit and extended-virtual-addressing entitlements. An unsigned build cannot grant either permission. Signulous must have a compatible profile and preserve them when signing. Without them, smaller streamed runs might fit the normal allowance, but successful generation is not guaranteed. iOS jetsam or a fatal GPU runtime error can terminate the process before Swift can show an error. Moss records an unfinished-run flag and explains that interruption at the next launch.
 
@@ -50,18 +52,18 @@ The app requests increased-memory-limit and extended-virtual-addressing entitlem
 - Background URLSession handles downloads while iOS allows it. Force-quitting the app can stop background transfers until the app is reopened. Pause/resume is per file; integrity verification must finish before generation.
 - Bookmarks persist access, but iOS or the Files provider can revoke it. External folders must remain locally available for offline use.
 - Import copies files. Moving also copies and verifies before deleting the originals; this needs temporary free space. Existing destination files cause a safe failure.
-- Checksum verification reads about 12 GB every launch. This is deliberately thorough and may take minutes.
+- Every file is SHA-256 checked once after download or import. Later launches only confirm each file's size and modification date; Settings → Verify all files re-reads all 12 GB.
 - No analytics or app account. Default downloads contact Hugging Face. Photos and sharing act only when requested or enabled.
 
 ## Build
 
-The canonical source configuration is `project.yml`. XcodeGen creates `Moss.xcodeproj` on GitHub. The workflow pins MLX Swift 0.32.3, selects Xcode 26.6 on macos-26, runs simulator tests, archives an unsigned arm64 iPhone app and checks for its Metal shader library before packaging. Source uploads can be ordinary repository files or `Moss-iOS-Source.zip` at the repository root.
+The canonical source configuration is `project.yml`. XcodeGen creates `Moss.xcodeproj`. `.github/workflows/build.yml` pins MLX Swift 0.32.3, selects the newest Xcode 26 on `macos-26`, archives an unsigned arm64 iPhone app, runs the simulator tests, checks for the MLX Metal library and packages `Moss-unsigned.ipa`. `.github/workflows/inference.yml` (triggered by pushing `ci/inference.json` to the `run-inference` branch) builds the `MossCLI` macOS harness from the same `Moss/Engine` sources, downloads the pinned weights and generates an image.
 
-No Apple signing credential, Hugging Face token, or model weight is needed for compilation. Unit-test preparation downloads only the approximately 20 MB tokenizer. Model weights download within the installed app.
+No Apple signing credential, Hugging Face token, or model weight is needed for compilation.
 
 ## Validation
 
-See `VALIDATION.md` for checks actually performed and those still outstanding. Successful syntax parsing is not Apple type checking. The build workflow has not been run by the author; it is supplied for the user's repository. There is no prebuilt IPA in this package.
+See `VALIDATION.md` for checks actually performed and those still outstanding.
 
 ## Sources and licensing
 

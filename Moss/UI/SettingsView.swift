@@ -41,7 +41,7 @@ struct ModelControls: View {
                 Toggle("Include Fast adapter",isOn:$includeFast)
                 Button(models.ready ? (models.fastReady ? "Check for missing files" : "Download Fast adapter") : "Download") {
                     if models.ready { includeFast = true }
-                    if models.cellular { confirmCellular = true } else { models.download(includeFast:includeFast) }
+                    if models.cellular { confirmCellular = true } else { models.download(includeFast:models.ready || includeFast) }
                 }.buttonStyle(.borderedProminent).controlSize(.large).disabled(app.running)
                 if models.cellular { Label("You are on cellular or a metered connection.",systemImage:"antenna.radiowaves.left.and.right").font(.caption).foregroundStyle(.orange) }
                 Menu("Choose storage or import files") {
@@ -69,7 +69,7 @@ struct ModelControls: View {
             } catch { if (error as NSError).code != NSUserCancelledError { models.error = error.localizedDescription } }
         }
         .confirmationDialog("Download using cellular data?",isPresented:$confirmCellular,titleVisibility:.visible) {
-            Button("Download using cellular") { models.download(includeFast:includeFast,allowCellular:true) }
+            Button("Download using cellular") { models.download(includeFast:models.ready || includeFast,allowCellular:true) }
             Button("Cancel",role:.cancel) {}
         } message: { Text("The complete model is about 12.1 GB, plus 1.2 GB for Fast. Your carrier may charge for this data.") }
         .confirmationDialog("Delete downloaded model files?",isPresented:$confirmDelete,titleVisibility:.visible) {

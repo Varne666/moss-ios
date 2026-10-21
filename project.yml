@@ -41,7 +41,6 @@ targets:
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
-        UIRequiresFullScreen: true
     entitlements:
       path: Moss/Moss.entitlements
       properties:
