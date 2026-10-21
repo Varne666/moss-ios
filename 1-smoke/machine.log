@@ -1,0 +1,8 @@
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+7516192768
+VirtualMac2,1
+Apple M1 (Virtual)
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk2s1s1   320Gi    12Gi    96Gi    11%    459k  1.0G    0%   /
