@@ -41,6 +41,7 @@ targets:
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
     entitlements:
       path: Moss/Moss.entitlements
       properties:
@@ -57,6 +58,24 @@ targets:
     dependencies:
       - package: mlx-swift
         product: MLX
+      - target: MossActivity
+  MossActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MossActivity
+      - path: Moss/Shared
+    info:
+      path: MossActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Moss
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.mossios.app.activity
+        TARGETED_DEVICE_FAMILY: '1'
+        SWIFT_EMIT_LOC_STRINGS: 'YES'
   MossCLI:
     type: tool
     platform: macOS

@@ -60,4 +60,29 @@ final class MossTests: XCTestCase {
         XCTAssertTrue(try ModelManager.valid(file,in:directory))
         try Data("abd".utf8).write(to:url); XCTAssertFalse(try ModelManager.valid(file,in:directory))
     }
+    func testCountdownUsesMeasuredStepsAndPauses() {
+        var settings = GenerationSettings(); settings.prompt = "a cat"; settings.preset(.fast)
+        var clock = GenerationClock(plan:.init(settings:settings),calibration:.init())
+        clock.record(.init(stage:.encode,index:0,total:32,message:""),at:0)
+        XCTAssertNil(clock.remaining(at:1), "No number before anything is measured")
+        clock.record(.init(stage:.prepare,index:0,total:1,message:""),at:20)
+        for i in 0...3 { clock.record(.init(stage:.sample,index:i,total:8,message:""),at:30 + Double(i) * 10) }
+        // 3 of 8 steps done at 10 s each (first dropped as warm-up), 5 left, decode guessed at 0.6 step.
+        XCTAssertEqual(clock.remaining(at:60) ?? -1, 5 * 10 + 6, accuracy:0.01)
+        clock.pause(at:60)
+        XCTAssertEqual(clock.remaining(at:500) ?? -1, 56, accuracy:0.01, "Paused time does not count")
+        clock.resume(at:500)
+        XCTAssertEqual(clock.remaining(at:505) ?? -1, 51, accuracy:0.01)
+        let learned = clock.calibrated()
+        XCTAssertEqual(learned.encode[1] ?? -1, 20, accuracy:0.01)
+        XCTAssertEqual(learned.steps.last?.seconds ?? -1, 10, accuracy:0.01)
+        // A later, larger guided run is estimated before it starts.
+        var best = settings; best.preset(.best)
+        let next = GenerationClock(plan:.init(settings:best),calibration:learned)
+        XCTAssertNil(next.remaining(at:0), "No encode timing yet for two prompts")
+        var fast2 = GenerationClock(plan:.init(settings:settings),calibration:learned)
+        XCTAssertNotNil(fast2.remaining(at:0))
+        fast2.record(.init(stage:.encode,index:0,total:32,message:""),at:0)
+        XCTAssertNotNil(fast2.remaining(at:1))
+    }
 }

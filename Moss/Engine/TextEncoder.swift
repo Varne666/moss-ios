@@ -5,8 +5,8 @@ import MLX
 final class MossTextEncoder {
     let store: TensorStore
     let control: RunControl
-    let progress: (String) -> Void
-    init(store: TensorStore, control: RunControl, progress: @escaping (String) -> Void) {
+    let progress: (Int) -> Void
+    init(store: TensorStore, control: RunControl, progress: @escaping (Int) -> Void) {
         self.store = store; self.control = control; self.progress = progress
     }
     /// Final-norm hidden states for each prompt. Each of the 32 layers is read from storage once and applied
@@ -26,7 +26,6 @@ final class MossTextEncoder {
         }
         for index in 0..<32 {
             try control.check()
-            progress("Reading prompt · layer \(index+1) of 32")
             try autoreleasepool {
                 let w = try store.load(prefix: "layers.\(index).")
                 for p in states.indices {
@@ -42,6 +41,7 @@ final class MossTextEncoder {
                 }
             }
             Memory.clearCache()
+            progress(index + 1)
         }
         let w = Weights(["norm.weight": try store.read("norm.weight")])
         return try states.map { x in let result = try w.norm(x, "norm", offset: true); eval(result); return result }

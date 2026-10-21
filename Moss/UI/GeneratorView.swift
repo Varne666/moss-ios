@@ -8,7 +8,7 @@ struct GeneratorView: View {
     @State private var negative = false
     @State private var custom = false
     @FocusState private var editing: Bool
-    private let ratios: [(String,Int,Int)] = [("1:1",512,512),("9:16",432,768),("16:9",768,432),("4:3",640,480),("3:4",480,640),("2:3",512,768),("3:2",768,512)]
+    private let ratios = AspectPreset.all.map { ($0.label,$0.width,$0.height) }
     var body: some View {
         ScrollView {
             VStack(spacing:16) {
@@ -59,7 +59,7 @@ struct GeneratorView: View {
                 VStack(spacing:16) {
                     Image(systemName:"leaf").font(.system(size:44,weight:.light)).foregroundStyle(mossAccent).accessibilityHidden(true)
                     Text(app.running ? "Your image is on its way" : "A little space for your imagination").font(.title3).multilineTextAlignment(.center)
-                    Text(app.running ? "Keep Moss open. The first run may take a long time." : "Describe a scene below to begin.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Text(app.running ? "Keep Moss open while it works. Your first image also teaches Moss how fast this iPhone is, so later countdowns start right away." : "Describe a scene below to begin.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.padding(32).frame(maxWidth:.infinity,minHeight:240)
             }
         }.clipShape(RoundedRectangle(cornerRadius:24,style:.continuous))
@@ -67,13 +67,64 @@ struct GeneratorView: View {
     }
     private var progress: some View {
         MossCard {
-            VStack(alignment:.leading,spacing:8) {
-                Text(app.progress.message).font(.headline)
-                if let value = app.progress.fraction { ProgressView(value:value) } else { ProgressView() }
-                if let seconds = app.progress.remaining { Text("About \(durationText(seconds)) left for sampling").font(.callout).foregroundStyle(.secondary) }
-                Text("Preview appears after decoding.").font(.caption).foregroundStyle(.secondary)
+            TimelineView(.periodic(from:.now,by:1)) { context in
+                let now = context.date
+                let end = app.estimatedEnd
+                let total = end.map { $0.timeIntervalSince(app.runStart) } ?? 0
+                let fraction = !app.paused && end != nil && total > 0 ? min(0.99,max(0,now.timeIntervalSince(app.runStart)/total)) : nil
+                VStack(alignment:.leading,spacing:12) {
+                    HStack(alignment:.firstTextBaseline) {
+                        if app.paused {
+                            Text("Paused").font(.system(.largeTitle,design:.rounded).weight(.semibold))
+                        } else if let end {
+                            Text(timerInterval:now...max(now,end),countsDown:true,showsHours:true)
+                                .font(.system(.largeTitle,design:.rounded).weight(.semibold)).monospacedDigit()
+                                .contentTransition(.numericText(countsDown:true))
+                        } else {
+                            Text("Estimating…").font(.system(.title,design:.rounded).weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let fraction { Text(fraction,format:.percent.precision(.fractionLength(0))).font(.title3.weight(.medium)).monospacedDigit().foregroundStyle(mossAccent) }
+                    }
+                    if let fraction { ProgressView(value:fraction).tint(mossAccent) } else { ProgressView(value:stageFraction).tint(mossAccent) }
+                    HStack {
+                        Text(statusLine).font(.callout).foregroundStyle(.secondary)
+                        Spacer()
+                        if let end, !app.paused { Text("Done at \(end.formatted(date:.omitted,time:.shortened))").font(.callout).foregroundStyle(.secondary) }
+                    }
+                }
+                .accessibilityElement(children:.combine)
+                .accessibilityLabel(accessibilityStatus(end:end,fraction:fraction))
             }
         }
+    }
+    private var statusLine: String {
+        if app.paused { return "Open Moss to keep going. iPhone pauses the GPU in the background." }
+        let p = app.progress
+        let prefix = app.settings.count > 1 ? "Image \(app.imageNumber) of \(app.settings.count) · " : ""
+        switch p.stage {
+        case .encode: return prefix + "Reading your prompt"
+        case .prepare: return prefix + "Preparing the image model"
+        case .sample: return prefix + "Step \(min(p.index+1,p.total)) of \(p.total)"
+        case .decode: return prefix + "Finishing the image"
+        default: return prefix + "Starting"
+        }
+    }
+    private var stageFraction: Double {
+        let p = app.progress
+        switch p.stage {
+        case .encode: return 0.1 * Double(p.index) / Double(max(1,p.total))
+        case .prepare: return 0.1
+        case .sample: return 0.1 + 0.8 * Double(p.index) / Double(max(1,p.total))
+        case .decode: return 0.9 + 0.1 * Double(p.index) / Double(max(1,p.total))
+        default: return 0
+        }
+    }
+    private func accessibilityStatus(end: Date?, fraction: Double?) -> String {
+        var parts = [statusLine]
+        if let fraction { parts.append("\(Int(fraction*100)) percent") }
+        if let end { parts.append("about \(durationText(end.timeIntervalSinceNow)) left") }
+        return parts.joined(separator:", ")
     }
     private var controls: some View {
         MossCard {
@@ -100,15 +151,15 @@ struct GeneratorView: View {
                         dimension("Width",value:$app.settings.width)
                         dimension("Height",value:$app.settings.height)
                     }
-                    Text("Sizes round to the nearest multiple of 16. Start at 512 × 512.").font(.caption).foregroundStyle(.secondary)
+                    Text("Sizes round to the nearest multiple of 16. Up to 1 megapixel (1024 × 1024).").font(.caption).foregroundStyle(.secondary)
                 }
-                if app.settings.width*app.settings.height > 768*768 {
-                    Label("Large image: experimental on iPhone. Memory use and time increase.",systemImage:"exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                if app.settings.width*app.settings.height < 700_000 {
+                    Label("Small image: MOSS is tuned for about 1 megapixel, so detail drops at this size.",systemImage:"exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
                 }
                 Picker("Quality",selection:Binding(get:{app.settings.quality},set:{app.settings.preset($0)})) {
                     ForEach(Quality.allCases) { q in Text(q.rawValue).tag(q) }
                 }.pickerStyle(.segmented)
-                Text(app.settings.quality == .fast ? "8-step distilled adapter. Requires its optional download." : app.settings.quality == .best ? "Official settings: 50 steps, guidance 3, shift 5, negative layer 22 skipped." : "20 steps with the Base model: faster, but below the official 50-step setting used by Best.").font(.caption).foregroundStyle(.secondary)
+                Text(app.settings.quality == .fast ? "Recommended. 8-step distilled adapter, one pass per step: the quickest way to a sharp 1-megapixel image." : app.settings.quality == .best ? "Official settings: 50 steps, guidance 3, shift 5, negative layer 22 skipped. About 12× the work of Fast." : "Base model, 30 steps with guidance 3. About 7× the work of Fast; follows the negative prompt.").font(.caption).foregroundStyle(.secondary)
                 DisclosureGroup("Negative prompt",isExpanded:$negative) {
                     TextField("Things to avoid (optional)",text:$app.settings.negativePrompt,axis:.vertical).lineLimit(2...5).focused($editing).padding(.top,8)
                     if app.settings.guidance == 1 { Text("Guidance is 1, so the negative branch is unused.").font(.caption).foregroundStyle(.secondary) }

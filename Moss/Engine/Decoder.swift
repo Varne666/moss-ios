@@ -5,8 +5,8 @@ import MLX
 final class MossDecoder {
     private let w: Weights
     private let control: RunControl
-    private let progress: (String) -> Void
-    init(store: TensorStore, control: RunControl, progress: @escaping (String) -> Void) throws {
+    private let progress: (Int) -> Void
+    init(store: TensorStore, control: RunControl, progress: @escaping (Int) -> Void) throws {
         w = try store.load(prefix: ""); self.control = control; self.progress = progress
     }
     private func rows(_ x: MLXArray) -> Int { max(1, min(x.shape[1], 16 * 1024 * 1024 / (x.shape[2] * x.shape[3] * 4))) }
@@ -95,9 +95,9 @@ final class MossDecoder {
         x = try attention(x)
         x = try resnet(x,"decoder.mid_block.resnets.1")
         for i in 0..<4 {
-            progress("Decoding image · stage \(i+1) of 4")
             for j in 0..<3 { x = try resnet(x,"decoder.up_blocks.\(i).resnets.\(j)"); Memory.clearCache() }
             if i < 3 { x = try upsample(x,"decoder.up_blocks.\(i).upsamplers.0") }
+            progress(i + 1)
         }
         let stats = try statistics(x)
         let out = try strips(x,"decoder.conv_out",pre:{ try mossSilu(self.normalize($0,"decoder.conv_norm_out",stats)) })

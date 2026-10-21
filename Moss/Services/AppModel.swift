@@ -10,6 +10,13 @@ import Combine
     @Published var message: String?
     @Published var error: String?
     @Published var tab = 0
+    /// Countdown for the current image: when it started (pauses excluded) and when it should finish.
+    @Published var runStart = Date()
+    @Published var estimatedEnd: Date?
+    @Published var paused = false
+    @Published var imageNumber = 1
+    private var clock: GenerationClock?
+    private let activity = LiveActivityController()
     let models: ModelManager
     let gallery: GalleryStore
     private var control: RunControl?
@@ -20,7 +27,7 @@ import Combine
         let width = UserDefaults.standard.integer(forKey:"defaultWidth"), height = UserDefaults.standard.integer(forKey:"defaultHeight")
         if width > 0 && height > 0 { settings.width = width; settings.height = height }
         if UserDefaults.standard.bool(forKey:"generationInProgress") {
-            message = "The previous image did not finish. iOS may have closed Moss, or the app stopped. Try 512 × 512 and keep Moss open. Your saved images are safe."
+            message = "The previous image did not finish. iOS may have closed Moss, or the app stopped. Keep Moss open while it works; try a smaller size or close other apps if it happens again. Your saved images are safe."
             UserDefaults.standard.set(false,forKey:"generationInProgress")
         }
     }
@@ -34,11 +41,12 @@ import Combine
             guard models.freeBytes > 500_000_000 else { throw MossError.model("Free at least 500 MB so Moss can save your images.") }
             let folder = models.folder, requested = settings, run = RunControl()
             control = run; running = true; error = nil; message = nil; preview = nil
-            progress = .init(message:"Preparing model")
+            progress = .init(message:"Preparing model"); imageNumber = 1; paused = false
             UserDefaults.standard.set(true,forKey:"generationInProgress")
             UIApplication.shared.isIdleTimerDisabled = true
             haptic()
             run.notice = { [weak self] text in Task { @MainActor in self?.message = text } }
+            run.pauseChanged = { [weak self] isPaused in let now = Date(); Task { @MainActor in self?.pauseTookEffect(isPaused, at: now) } }
             worker.async {
                 do {
                     for index in 0..<requested.count {
@@ -47,11 +55,17 @@ import Combine
                         actual.seed = requested.lockedSeed ? requested.seed &+ UInt32(index) : UInt32.random(in:0...UInt32.max)
                         actual.lockedSeed = true
                         let start = Date()
+                        let semaphoreStart = DispatchSemaphore(value:0)
+                        Task { @MainActor in self.begin(actual, number:index+1, of:requested.count); semaphoreStart.signal() }
+                        semaphoreStart.wait()
                         let image = UIImage(cgImage: try autoreleasepool {
                             try MossPipeline().generate(settings:actual,folder:folder,manifest:manifest,control:run) { value in
-                                Task { @MainActor in self.progress = value }
+                                let now = Date()
+                                Task { @MainActor in self.advance(value, at:now) }
                             }
                         })
+                        let finishedAt = Date()
+                        Task { @MainActor in self.complete(at:finishedAt) }
                         let duration = Date().timeIntervalSince(start)
                         // Save each completed image before starting the next one.
                         let semaphore = DispatchSemaphore(value:0)
@@ -72,14 +86,76 @@ import Combine
             }
         } catch { self.error = error.localizedDescription }
     }
+    // MARK: Countdown and Live Activity
+
+    private func begin(_ settings: GenerationSettings, number: Int, of count: Int) {
+        clock = GenerationClock(plan:.init(settings:settings),calibration:.load())
+        imageNumber = number; runStart = Date(); estimatedEnd = nil
+        progress = .init(message:count > 1 ? "Image \(number) of \(count)" : "Preparing model")
+        let state = activityState()
+        if number == 1 { activity.start(settings:settings,state:state) } else { activity.update(state,force:true) }
+        refreshEstimate()
+    }
+    private func advance(_ value: GenerationProgress, at now: Date) {
+        clock?.record(value, at:now.timeIntervalSinceReferenceDate)
+        progress = value
+        refreshEstimate()
+    }
+    private func complete(at now: Date) {
+        guard var c = clock else { return }
+        c.record(.init(stage:.done,index:1,total:1,message:"Done"), at:now.timeIntervalSinceReferenceDate)
+        c.calibrated().save()
+        clock = nil
+    }
+    private func refreshEstimate() {
+        guard let clock else { estimatedEnd = nil; return }
+        let now = Date()
+        if let left = clock.remaining(at:now.timeIntervalSinceReferenceDate) {
+            let end = now.addingTimeInterval(left)
+            // Keep the countdown steady: only move the finish time for changes over 3 s or 3 %.
+            if let old = estimatedEnd, abs(old.timeIntervalSince(end)) < max(3, left * 0.03) {} else { estimatedEnd = end }
+            if let f = clock.fraction(at:now.timeIntervalSinceReferenceDate), f > 0, f < 1 {
+                runStart = now.addingTimeInterval(-(left * f / (1 - f)))
+            }
+        } else { estimatedEnd = nil }
+        activity.update(activityState())
+    }
+    private func activityState() -> GenerationActivityAttributes.ContentState {
+        let detail = progress.stage == .sample ? "Step \(min(progress.index+1,progress.total)) of \(progress.total)" :
+            progress.stage == .decode ? "Finishing" : progress.stage == .encode ? "Reading prompt" : "Preparing"
+        let label = settings.count > 1 ? "Image \(imageNumber) · \(detail)" : detail
+        let fraction = clock?.fraction(at:Date().timeIntervalSinceReferenceDate) ?? 0
+        return .init(phase: paused ? .paused : (estimatedEnd == nil ? .estimating : .running), detail:label, start:runStart, end:estimatedEnd, fraction:fraction)
+    }
+    private func pauseTookEffect(_ isPaused: Bool, at now: Date) {
+        paused = isPaused
+        if isPaused { clock?.pause(at:now.timeIntervalSinceReferenceDate) } else { clock?.resume(at:now.timeIntervalSinceReferenceDate) }
+        if isPaused { activity.update(activityState(),force:true) } else { refreshEstimate(); activity.update(activityState(),force:true) }
+    }
+    /// Moss left the screen (or is about to): stop at the next layer boundary instead of cancelling.
+    func leftScreen() {
+        guard running else { return }
+        control?.pause(); paused = true
+        clock?.pause(at:Date().timeIntervalSinceReferenceDate)
+        activity.update(activityState(),force:true)
+    }
+    func returnedToScreen() {
+        guard running else { return }
+        control?.resume()
+        clock?.resume(at:Date().timeIntervalSinceReferenceDate)
+        paused = false; refreshEstimate(); activity.update(activityState(),force:true)
+    }
+
     private func finish(_ error: Error?) {
+        let ok = error == nil
+        activity.end(state:.init(phase: ok ? .finished : .failed, detail: ok ? "Saved to your gallery" : "Stopped", start:runStart, end:Date(), fraction: ok ? 1 : 0))
+        clock = nil; estimatedEnd = nil; paused = false
         running = false; control = nil; UIApplication.shared.isIdleTimerDisabled = false
         UserDefaults.standard.set(false,forKey:"generationInProgress")
         progress = .init(message:error == nil ? "Image saved in your gallery" : "Generation stopped")
         if let error { self.error = error.localizedDescription }
     }
     func cancel() { control?.cancel(); progress = .init(message:"Stopping after the current operation") }
-    func backgrounded() { if running { control?.cancel(.background) } }
     func memoryWarning() { if running { control?.cancel(.memory) } }
     func reuse(_ item: GalleryItem) {
         guard !running else { error = "Wait for this image to finish before reusing settings."; return }

@@ -2,10 +2,13 @@ import Foundation
 import CoreGraphics
 import MLX
 
-struct GenerationProgress {
-    let message: String
-    var fraction: Double? = nil
-    var remaining: Double? = nil
+/// A pipeline milestone. `index` counts completed units of `total` within the stage.
+struct GenerationProgress: Equatable {
+    enum Stage: Int, Codable { case starting, encode, prepare, sample, decode, done }
+    var stage: Stage = .starting
+    var index = 0
+    var total = 1
+    var message: String
 }
 final class MossPipeline {
     func generate(settings s: GenerationSettings, folder: URL, manifest: ModelManifest, control: RunControl,
@@ -20,7 +23,7 @@ final class MossPipeline {
             guard !urls.isEmpty else { throw MossError.model("The model is missing its \(component) files.") }
             return try TensorStore(files:urls)
         }
-        progress(.init(message:"Reading your prompt"))
+        progress(.init(stage:.encode,index:0,total:32,message:"Reading your prompt"))
         let contexts: (MLXArray,MLXArray?) = try autoreleasepool {
             let tokenizer = try MossTokenizer(url:folder.appendingPathComponent("tokenizer/tokenizer.json"))
             let positive = try tokenizer.encode(s.prompt)
@@ -29,7 +32,7 @@ final class MossPipeline {
             guard positive.count <= 1024, (negative?.count ?? 0) <= 1024 else {
                 throw MossError.model("This prompt is too long for the phone memory limit. Shorten it to roughly 600 words or simplify the JSON layout. Your text has not been truncated.")
             }
-            let encoder = try MossTextEncoder(store:store("text"),control:control,progress:{ progress(.init(message:$0)) })
+            let encoder = try MossTextEncoder(store:store("text"),control:control,progress:{ done in progress(.init(stage:.encode,index:done,total:32,message:"Reading your prompt")) })
             let encoded = try encoder.encode(prompts: negative.map { [positive, $0] } ?? [positive])
             return (encoded[0], encoded.count > 1 ? encoded[1] : nil)
         }
@@ -41,16 +44,15 @@ final class MossPipeline {
         try autoreleasepool {
             let adapter = s.quality == .fast ? try store("adapter") : nil
             let transformer = try MossTransformer(store:store("transformer"),adapter:adapter,control:control)
-            progress(.init(message:"Preparing prompt for the image model"))
+            progress(.init(stage:.prepare,index:0,total:1,message:"Preparing the image model"))
             var branches = [try transformer.prepare(context:contexts.0,height:h,width:w,skipped:[])]
             if let negative = contexts.1 {
                 branches.append(try transformer.prepare(context:negative,height:h,width:w,skipped:s.skipLayer ? [22] : []))
             }
-            let start = Date()
-            for i in 0..<(schedule.count-1) {
+            let stepCount = schedule.count-1
+            for i in 0..<stepCount {
                 try control.check()
-                let elapsed = Date().timeIntervalSince(start)
-                progress(.init(message:"Step \(i+1) of \(schedule.count-1)",fraction:Double(i)/Double(schedule.count-1),remaining:i > 0 ? elapsed/Double(i)*Double(schedule.count-1-i) : nil))
+                progress(.init(stage:.sample,index:i,total:stepCount,message:"Step \(i+1) of \(stepCount)"))
                 let velocity: MLXArray = try autoreleasepool {
                     let outputs = try transformer.predict(latent,time:schedule[i]*1000,branches:branches)
                     if outputs.count == 2 {
@@ -60,11 +62,12 @@ final class MossPipeline {
                 }
                 latent = latent + velocity*(schedule[i+1]-schedule[i]); eval(latent); Memory.clearCache()
             }
+            progress(.init(stage:.sample,index:stepCount,total:stepCount,message:"Step \(stepCount) of \(stepCount)"))
         }
         Memory.clearCache(); try control.check()
-        progress(.init(message:"Decoding image",fraction:1))
+        progress(.init(stage:.decode,index:0,total:4,message:"Finishing the image"))
         return try autoreleasepool {
-            let decoder = try MossDecoder(store:store("vae"),control:control,progress:{ progress(.init(message:$0,fraction:1)) })
+            let decoder = try MossDecoder(store:store("vae"),control:control,progress:{ done in progress(.init(stage:.decode,index:done,total:4,message:"Finishing the image")) })
             let decoded = try decoder.decode(latent)
             let pixels = decoded.asArray(Float.self)
             var rgba = [UInt8](repeating:255,count:s.width*s.height*4)

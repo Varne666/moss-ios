@@ -20,7 +20,7 @@ struct ModelControls: View {
     @State private var action = "choose"
     @State private var confirmCellular = false
     @State private var confirmDelete = false
-    @State private var includeFast = false
+    @State private var includeFast = true
     @State private var manifestURL = ""
     @State private var advanced = false
     var body: some View {
@@ -83,9 +83,9 @@ struct SettingsView: View {
     @EnvironmentObject var gallery: GalleryStore
     @AppStorage("autoSave") private var autoSave = false
     @AppStorage("haptics") private var haptics = true
-    @AppStorage("defaultQuality") private var quality = "Balanced"
-    @AppStorage("defaultWidth") private var width = 512
-    @AppStorage("defaultHeight") private var height = 512
+    @AppStorage("defaultQuality") private var quality = "Fast"
+    @AppStorage("defaultWidth") private var width = 1024
+    @AppStorage("defaultHeight") private var height = 1024
     @State private var clear = false
     var body: some View {
         Form {
@@ -93,8 +93,7 @@ struct SettingsView: View {
             Section("Defaults") {
                 Picker("Quality",selection:$quality) { ForEach(Quality.allCases) { Text($0.rawValue).tag($0.rawValue) } }
                 Picker("Aspect ratio",selection:Binding(get:{"\(width)x\(height)"},set:{ value in let parts = value.split(separator:"x").compactMap { Int($0) }; if parts.count == 2 { width = parts[0]; height = parts[1] } })) {
-                    Text("1:1").tag("512x512"); Text("9:16").tag("432x768"); Text("16:9").tag("768x432")
-                    Text("4:3").tag("640x480"); Text("3:4").tag("480x640"); Text("2:3").tag("512x768"); Text("3:2").tag("768x512")
+                    ForEach(AspectPreset.all, id: \.label) { entry in Text(entry.label).tag("\(entry.width)x\(entry.height)") }
                 }
                 Text("Defaults apply the next time Moss opens.").font(.caption).foregroundStyle(.secondary)
                 Toggle("Save to Photos automatically",isOn:$autoSave)

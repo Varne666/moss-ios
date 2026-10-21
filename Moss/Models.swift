@@ -21,11 +21,11 @@ enum Quality: String, Codable, CaseIterable, Identifiable {
 struct GenerationSettings: Codable, Equatable {
     var prompt = ""
     var negativePrompt = ""
-    var width = 512
-    var height = 512
-    var quality: Quality = .balanced
-    var steps = 20
-    var guidance: Float = 3
+    var width = 1024
+    var height = 1024
+    var quality: Quality = .fast
+    var steps = 8
+    var guidance: Float = 1
     var shift: Float = 5
     var skipLayer = true
     var seed: UInt32 = 42
@@ -33,7 +33,7 @@ struct GenerationSettings: Codable, Equatable {
     var count = 1
     mutating func preset(_ q: Quality) {
         quality = q; shift = 5; skipLayer = true
-        steps = q == .fast ? 8 : q == .best ? 50 : 20
+        steps = q == .fast ? 8 : q == .best ? 50 : 30
         guidance = q == .fast ? 1 : 3
     }
     func validate() throws {
@@ -45,6 +45,14 @@ struct GenerationSettings: Codable, Equatable {
               (0.1...20).contains(shift), (1...8).contains(count) else { throw MossError.model("Check your advanced settings. Use 1–100 steps, guidance 0–10, shift 0.1–20, and 1–8 images.") }
         guard !prompt.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw MossError.model("Describe the image you want first.") }
     }
+}
+/// About one megapixel per aspect ratio, all multiples of 16. MOSS-Image is tuned for 1–2 MP output; smaller
+/// images are extrapolation and lose detail, larger ones exceed the phone memory budget used here.
+enum AspectPreset {
+    static let all: [(label: String, width: Int, height: Int)] = [
+        ("1:1", 1024, 1024), ("4:5", 896, 1120), ("3:4", 864, 1152), ("2:3", 832, 1248), ("9:16", 768, 1360),
+        ("5:4", 1120, 896), ("4:3", 1152, 864), ("3:2", 1248, 832), ("16:9", 1360, 768),
+    ]
 }
 struct GalleryItem: Codable, Identifiable, Equatable {
     let id: UUID
