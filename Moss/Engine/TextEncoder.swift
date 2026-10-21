@@ -9,34 +9,58 @@ final class MossTextEncoder {
     init(store: TensorStore, control: RunControl, progress: @escaping (String) -> Void) {
         self.store = store; self.control = control; self.progress = progress
     }
-    func encode(ids: [Int]) throws -> MLXArray {
-        var rows: [MLXArray] = []
-        for id in ids {
-            let w = try store.read("embed_tokens.weight", row: id)
-            let s = try store.read("embed_tokens.scales", row: id)
-            let b = try store.read("embed_tokens.biases", row: id)
-            let row = dequantized(w, scales: s, biases: b, groupSize: 64, bits: 6).asType(.bfloat16)
-            eval(row); rows.append(row)
+    /// Final-norm hidden states for each prompt. Each of the 32 layers is read from storage once and applied
+    /// to every prompt (positive and negative) before the next layer is read.
+    func encode(prompts: [[Int]]) throws -> [MLXArray] {
+        try checkLayout()
+        var states: [MLXArray] = try prompts.map { ids in
+            var rows: [MLXArray] = []
+            for id in ids {
+                let w = try store.read("embed_tokens.weight", row: id)
+                let s = try store.read("embed_tokens.scales", row: id)
+                let b = try store.read("embed_tokens.biases", row: id)
+                let row = dequantized(w, scales: s, biases: b, groupSize: 64, bits: 6).asType(.bfloat16)
+                eval(row); rows.append(row)
+            }
+            let x = concatenated(rows, axis: 0).reshaped([1, ids.count, 4096]); eval(x); return x
         }
-        var x = concatenated(rows, axis: 0).reshaped([1, ids.count, 4096]); eval(x); rows.removeAll()
         for index in 0..<32 {
             try control.check()
             progress("Reading prompt · layer \(index+1) of 32")
-            x = try autoreleasepool {
+            try autoreleasepool {
                 let w = try store.load(prefix: "layers.\(index).")
-                let y = try w.norm(x, "input_layernorm", offset: true)
-                let attn = try (index % 4 == 3 ? fullAttention(y, w) : linearAttention(y, w))
-                let h = x + attn
-                let z = try w.norm(h, "post_attention_layernorm", offset: true)
-                let gate = try w.linear(z, "mlp.gate_proj", bits: 6)
-                let up = try w.linear(z, "mlp.up_proj", bits: 6)
-                let result = try h + w.linear(mossSilu(gate) * up, "mlp.down_proj", bits: 6)
-                eval(result); return result
+                for p in states.indices {
+                    let x = states[p]
+                    let y = try w.norm(x, "input_layernorm", offset: true)
+                    let attn = try (index % 4 == 3 ? fullAttention(y, w) : linearAttention(y, w))
+                    let h = x + attn
+                    let z = try w.norm(h, "post_attention_layernorm", offset: true)
+                    let gate = try w.linear(z, "mlp.gate_proj", bits: 6)
+                    let up = try w.linear(z, "mlp.up_proj", bits: 6)
+                    states[p] = try h + w.linear(mossSilu(gate) * up, "mlp.down_proj", bits: 6)
+                    eval(states[p])
+                }
             }
             Memory.clearCache()
         }
         let w = Weights(["norm.weight": try store.read("norm.weight")])
-        let result = try w.norm(x, "norm", offset: true); eval(result); return result
+        return try states.map { x in let result = try w.norm(x, "norm", offset: true); eval(result); return result }
+    }
+    /// The engine hard-codes the Qwen3.5 text encoder shape and 6-bit g64 packing; refuse anything else.
+    private func checkLayout() throws {
+        func shape(_ name: String) -> [Int]? { store.entries[name]?.shape }
+        let expected: [(String, [Int])] = [
+            ("embed_tokens.weight", [248320, 4096 * 6 / 32]),
+            ("embed_tokens.scales", [248320, 4096 / 64]),
+            ("layers.0.linear_attn.in_proj_qkv.weight", [8192, 4096 * 6 / 32]),
+            ("layers.0.linear_attn.conv1d.weight", [8192, 4, 1]),
+            ("layers.3.self_attn.q_proj.weight", [8192, 4096 * 6 / 32]),
+            ("norm.weight", [4096]),
+        ]
+        for (name, value) in expected where shape(name) != value {
+            throw MossError.model("The text encoder files do not match this version of Moss (\(name) is \(shape(name).map { "\($0)" } ?? "missing")). Re-download the model.")
+        }
+        guard shape("layers.32.input_layernorm.weight") == nil else { throw MossError.model("The text encoder has more layers than this version of Moss supports.") }
     }
     private func fullAttention(_ x: MLXArray, _ w: Weights) throws -> MLXArray {
         let n = x.shape[1], p = "self_attn."

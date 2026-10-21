@@ -19,11 +19,14 @@ final class MossTokenizer {
         }
         added = Dictionary(uniqueKeysWithValues: tokens)
         specials = try NSRegularExpression(pattern: tokens.map { $0.0 }.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|"))
-        let standard = #"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"#
-        let pretok = root["pre_tokenizer"] as? [String: Any]
-        let items = pretok?["pretokenizers"] as? [[String: Any]]
-        let pattern = (items?.first?["pattern"] as? [String: String])?["Regex"] ?? standard
-        split = try NSRegularExpression(pattern: pattern.replacingOccurrences(of: "\\\\", with: "\\"))
+        // The official tokenizer is Sequence[Split(Regex, Isolated), ByteLevel(use_regex: false)].
+        guard let pretok = root["pre_tokenizer"] as? [String: Any],
+              let items = pretok["pretokenizers"] as? [[String: Any]],
+              let first = items.first, first["type"] as? String == "Split",
+              let pattern = (first["pattern"] as? [String: String])?["Regex"] else {
+            throw MossError.model("The tokenizer format is not supported. Re-download the model.")
+        }
+        split = try NSRegularExpression(pattern: pattern)
         var bytes = Array(33...126) + Array(161...172) + Array(174...255)
         var codes = bytes; var n = 0
         for b in 0...255 where !bytes.contains(b) { bytes.append(b); codes.append(256+n); n += 1 }
@@ -48,8 +51,16 @@ final class MossTokenizer {
     }
     private func encodeOrdinary(_ raw: String, into output: inout [Int]) throws {
         let text = raw.precomposedStringWithCanonicalMapping; let ns = text as NSString
+        // Split with "Isolated" behaviour keeps the text between matches as its own pieces.
+        var pieces: [String] = []; var cursor = 0
         for match in split.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            var parts = ns.substring(with: match.range).utf8.map { byteMap[$0]! }
+            if match.range.location > cursor { pieces.append(ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))) }
+            if match.range.length > 0 { pieces.append(ns.substring(with: match.range)) }
+            cursor = NSMaxRange(match.range)
+        }
+        if cursor < ns.length { pieces.append(ns.substring(from: cursor)) }
+        for piece in pieces {
+            var parts = piece.utf8.map { byteMap[$0]! }
             while parts.count > 1 {
                 var best: Int?, rank = Int.max
                 for i in 0..<(parts.count-1) {

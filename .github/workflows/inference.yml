@@ -41,6 +41,7 @@ jobs:
           ADAPTER=""; [ "${{ env.REQ_PRESET }}" = "fast" ] && ADAPTER="--adapter"
           python3 scripts/download_models.py "$RUNNER_TEMP/models" $ADAPTER 2>&1 | tee out/download.log
           df -h / | tee -a out/download.log
+          python3 scripts/inspect_checkpoint.py "$RUNNER_TEMP/models" > out/checkpoint.txt 2>&1 || true
       - name: Generate
         run: |
           set -o pipefail

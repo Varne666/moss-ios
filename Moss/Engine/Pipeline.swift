@@ -30,9 +30,8 @@ final class MossPipeline {
                 throw MossError.model("This prompt is too long for the phone memory limit. Shorten it to roughly 600 words or simplify the JSON layout. Your text has not been truncated.")
             }
             let encoder = try MossTextEncoder(store:store("text"),control:control,progress:{ progress(.init(message:$0)) })
-            let p = try encoder.encode(ids:positive)
-            let n = try negative.map { try encoder.encode(ids:$0) }
-            return (p,n)
+            let encoded = try encoder.encode(prompts: negative.map { [positive, $0] } ?? [positive])
+            return (encoded[0], encoded.count > 1 ? encoded[1] : nil)
         }
         Memory.clearCache(); try control.check()
         let h = s.height/16, w = s.width/16
@@ -42,18 +41,22 @@ final class MossPipeline {
         try autoreleasepool {
             let adapter = s.quality == .fast ? try store("adapter") : nil
             let transformer = try MossTransformer(store:store("transformer"),adapter:adapter,control:control)
+            progress(.init(message:"Preparing prompt for the image model"))
+            var branches = [try transformer.prepare(context:contexts.0,height:h,width:w,skipped:[])]
+            if let negative = contexts.1 {
+                branches.append(try transformer.prepare(context:negative,height:h,width:w,skipped:s.skipLayer ? [22] : []))
+            }
             let start = Date()
             for i in 0..<(schedule.count-1) {
                 try control.check()
                 let elapsed = Date().timeIntervalSince(start)
                 progress(.init(message:"Step \(i+1) of \(schedule.count-1)",fraction:Double(i)/Double(schedule.count-1),remaining:i > 0 ? elapsed/Double(i)*Double(schedule.count-1-i) : nil))
                 let velocity: MLXArray = try autoreleasepool {
-                    let positive = try transformer.predict(latent,time:schedule[i]*1000,context:contexts.0,skip22:false)
-                    if let negative = contexts.1 {
-                        let unconditional = try transformer.predict(latent,time:schedule[i]*1000,context:negative,skip22:s.skipLayer)
-                        let result = unconditional + s.guidance*(positive-unconditional); eval(result); return result
+                    let outputs = try transformer.predict(latent,time:schedule[i]*1000,branches:branches)
+                    if outputs.count == 2 {
+                        let result = outputs[1] + s.guidance*(outputs[0]-outputs[1]); eval(result); return result
                     }
-                    return positive
+                    return outputs[0]
                 }
                 latent = latent + velocity*(schedule[i+1]-schedule[i]); eval(latent); Memory.clearCache()
             }
