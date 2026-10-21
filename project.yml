@@ -96,6 +96,8 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+      - path: MossActivity/ActivityViews.swift
+      - path: Moss/Shared/GenerationActivity.swift
     dependencies:
       - target: Moss
     settings:

@@ -47,6 +47,7 @@ jobs:
           set -o pipefail
           DEVICE_ID=$(python3 scripts/pick_simulator.py)
           echo "Simulator: $DEVICE_ID" | tee build/tests.log
+          export TEST_RUNNER_SNAPSHOT_DIR="$PWD/build/snapshots"
           xcodebuild test -project Moss.xcodeproj -scheme Moss \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -derivedDataPath build/DerivedDataSim -resultBundlePath build/MossTests.xcresult \
@@ -71,6 +72,7 @@ jobs:
           for f in build/*.log; do [ -f "$f" ] && tail -c 400000 "$f" > "$OUT/logs/$(basename "$f")"; done
           for f in build/*.log; do [ -f "$f" ] && grep -nE "error:|warning: .*(deprecated|unused)|\*\* .* FAILED|Test Case .* failed|XCTAssert" "$f" | head -400 > "$OUT/logs/$(basename "$f" .log).errors.txt"; done
           cp build/Download/* "$OUT/" 2>/dev/null || true
+          [ -d build/snapshots ] && cp -R build/snapshots "$OUT/snapshots" || true
           echo "run=$RUN sha=$SHA status=$STATUS" > "$OUT/RESULT.txt"
           cd "$OUT"
           git init -q -b ci-output

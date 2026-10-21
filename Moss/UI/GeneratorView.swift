@@ -66,37 +66,7 @@ struct GeneratorView: View {
             .background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:24))
     }
     private var progress: some View {
-        MossCard {
-            TimelineView(.periodic(from:.now,by:1)) { context in
-                let now = context.date
-                let end = app.estimatedEnd
-                let total = end.map { $0.timeIntervalSince(app.runStart) } ?? 0
-                let fraction = !app.paused && end != nil && total > 0 ? min(0.99,max(0,now.timeIntervalSince(app.runStart)/total)) : nil
-                VStack(alignment:.leading,spacing:12) {
-                    HStack(alignment:.firstTextBaseline) {
-                        if app.paused {
-                            Text("Paused").font(.system(.largeTitle,design:.rounded).weight(.semibold))
-                        } else if let end {
-                            Text(timerInterval:now...max(now,end),countsDown:true,showsHours:true)
-                                .font(.system(.largeTitle,design:.rounded).weight(.semibold)).monospacedDigit()
-                                .contentTransition(.numericText(countsDown:true))
-                        } else {
-                            Text("Estimating…").font(.system(.title,design:.rounded).weight(.semibold)).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if let fraction { Text(fraction,format:.percent.precision(.fractionLength(0))).font(.title3.weight(.medium)).monospacedDigit().foregroundStyle(mossAccent) }
-                    }
-                    if let fraction { ProgressView(value:fraction).tint(mossAccent) } else { ProgressView(value:stageFraction).tint(mossAccent) }
-                    HStack {
-                        Text(statusLine).font(.callout).foregroundStyle(.secondary)
-                        Spacer()
-                        if let end, !app.paused { Text("Done at \(end.formatted(date:.omitted,time:.shortened))").font(.callout).foregroundStyle(.secondary) }
-                    }
-                }
-                .accessibilityElement(children:.combine)
-                .accessibilityLabel(accessibilityStatus(end:end,fraction:fraction))
-            }
-        }
+        GenerationProgressCard(paused:app.paused,runStart:app.runStart,estimatedEnd:app.estimatedEnd,status:statusLine,stageFraction:stageFraction)
     }
     private var statusLine: String {
         if app.paused { return "Open Moss to keep going. iPhone pauses the GPU in the background." }
@@ -119,12 +89,6 @@ struct GeneratorView: View {
         case .decode: return 0.9 + 0.1 * Double(p.index) / Double(max(1,p.total))
         default: return 0
         }
-    }
-    private func accessibilityStatus(end: Date?, fraction: Double?) -> String {
-        var parts = [statusLine]
-        if let fraction { parts.append("\(Int(fraction*100)) percent") }
-        if let end { parts.append("about \(durationText(end.timeIntervalSinceNow)) left") }
-        return parts.joined(separator:", ")
     }
     private var controls: some View {
         MossCard {
@@ -188,6 +152,46 @@ struct GeneratorView: View {
             }
             Stepper("Images per run: \(app.settings.count)",value:$app.settings.count,in:1...8)
             Text("Images run one at a time. A locked seed increases by one for each image. Changing advanced values overrides the preset settings.").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Countdown card shown while an image is being generated.
+struct GenerationProgressCard: View {
+    let paused: Bool
+    let runStart: Date
+    let estimatedEnd: Date?
+    let status: String
+    let stageFraction: Double
+    var body: some View {
+        MossCard {
+            TimelineView(.periodic(from:.now,by:1)) { context in
+                let now = context.date
+                let total = estimatedEnd.map { $0.timeIntervalSince(runStart) } ?? 0
+                let fraction: Double? = !paused && estimatedEnd != nil && total > 0 ? min(0.99,max(0,now.timeIntervalSince(runStart)/total)) : nil
+                VStack(alignment:.leading,spacing:12) {
+                    HStack(alignment:.firstTextBaseline) {
+                        if paused {
+                            Text("Paused").font(.system(.largeTitle,design:.rounded).weight(.semibold))
+                        } else if let end = estimatedEnd {
+                            Text(timerInterval:now...max(now,end),countsDown:true,showsHours:true)
+                                .font(.system(.largeTitle,design:.rounded).weight(.semibold)).monospacedDigit()
+                        } else {
+                            Text("Estimating…").font(.system(.title,design:.rounded).weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let fraction { Text(fraction,format:.percent.precision(.fractionLength(0))).font(.title3.weight(.medium)).monospacedDigit().foregroundStyle(mossAccent) }
+                    }
+                    ProgressView(value:fraction ?? stageFraction).tint(mossAccent)
+                    HStack(alignment:.firstTextBaseline) {
+                        Text(status).font(.callout).foregroundStyle(.secondary)
+                        Spacer()
+                        if let end = estimatedEnd, !paused { Text("Done at \(end.formatted(date:.omitted,time:.shortened))").font(.callout).foregroundStyle(.secondary) }
+                    }
+                }
+                .accessibilityElement(children:.combine)
+                .accessibilityLabel([status, fraction.map { "\(Int($0*100)) percent" }, estimatedEnd.map { "about \(durationText($0.timeIntervalSince(now))) left" }].compactMap { $0 }.joined(separator:", "))
+            }
         }
     }
 }
