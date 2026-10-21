@@ -1,21 +1,8 @@
 name: Real inference check (Mac)
+# Triggered by pushing to the run-inference branch; parameters come from ci/inference.json on that branch.
 on:
-  workflow_dispatch:
-    inputs:
-      prompt:
-        default: "A red fox sitting in fresh snow, golden hour, photograph"
-      width:
-        default: "256"
-      height:
-        default: "256"
-      preset:
-        default: "best"
-      steps:
-        default: ""
-      seed:
-        default: "42"
-      label:
-        default: "check"
+  push:
+    branches: [run-inference]
 permissions:
   contents: write
 concurrency:
@@ -27,6 +14,14 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
+      - name: Read request
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          r = json.load(open('ci/inference.json'))
+          for k, v in {'prompt': 'A red fox sitting in fresh snow, golden hour, photograph', 'width': '256', 'height': '256', 'preset': 'best', 'steps': '', 'seed': '42', 'label': 'check'}.items():
+              print(f"REQ_{k.upper()}={str(r.get(k, v)).replace(chr(10), ' ')}")
+          PY
       - name: Machine
         run: |
           mkdir -p out
@@ -43,23 +38,23 @@ jobs:
           build/DD/Build/Products/Release/MossCLI --selftest 2>&1 | tee out/selftest.log
       - name: Download real weights
         run: |
-          ADAPTER=""; [ "${{ inputs.preset }}" = "fast" ] && ADAPTER="--adapter"
+          ADAPTER=""; [ "${{ env.REQ_PRESET }}" = "fast" ] && ADAPTER="--adapter"
           python3 scripts/download_models.py "$RUNNER_TEMP/models" $ADAPTER 2>&1 | tee out/download.log
           df -h / | tee -a out/download.log
       - name: Generate
         run: |
           set -o pipefail
-          STEPS=""; [ -n "${{ inputs.steps }}" ] && STEPS="--steps ${{ inputs.steps }}"
+          STEPS=""; [ -n "${{ env.REQ_STEPS }}" ] && STEPS="--steps ${{ env.REQ_STEPS }}"
           /usr/bin/time -l build/DD/Build/Products/Release/MossCLI --models "$RUNNER_TEMP/models" \
             --manifest Moss/Resources/model-manifest.json --out out/image.png \
-            --prompt "${{ inputs.prompt }}" --width ${{ inputs.width }} --height ${{ inputs.height }} \
-            --preset ${{ inputs.preset }} $STEPS --seed ${{ inputs.seed }} 2>&1 | tee out/generate.log
+            --prompt "${{ env.REQ_PROMPT }}" --width ${{ env.REQ_WIDTH }} --height ${{ env.REQ_HEIGHT }} \
+            --preset ${{ env.REQ_PRESET }} $STEPS --seed ${{ env.REQ_SEED }} 2>&1 | tee out/generate.log
       - name: Publish
         if: always()
         run: |
           OUT=$RUNNER_TEMP/pub; rm -rf "$OUT"; git clone -q --depth 1 -b inference-output "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "$OUT" 2>/dev/null || { mkdir -p "$OUT"; git -C "$OUT" init -q -b inference-output; }
-          D="$OUT/${{ github.run_number }}-${{ inputs.label }}"; mkdir -p "$D"; cp -R out/. "$D/"
+          D="$OUT/${{ github.run_number }}-${{ env.REQ_LABEL }}"; mkdir -p "$D"; cp -R out/. "$D/"
           echo "status=${{ job.status }} sha=${{ github.sha }}" > "$D/RESULT.txt"
           cd "$OUT"; git config user.name moss-ci; git config user.email moss-ci@users.noreply.github.com
-          git add -A; git commit -qm "inference ${{ github.run_number }} ${{ inputs.label }} ${{ job.status }}"
+          git add -A; git commit -qm "inference ${{ github.run_number }} ${{ env.REQ_LABEL }} ${{ job.status }}"
           git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" HEAD:inference-output
