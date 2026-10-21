@@ -108,7 +108,7 @@ struct GeneratorView: View {
                 Picker("Quality",selection:Binding(get:{app.settings.quality},set:{app.settings.preset($0)})) {
                     ForEach(Quality.allCases) { q in Text(q.rawValue).tag(q) }
                 }.pickerStyle(.segmented)
-                Text(app.settings.quality == .fast ? "8-step distilled adapter. Requires its optional download." : app.settings.quality == .best ? "Official settings: 50 steps, guidance 3, shift 5, negative layer 22 skipped." : "20 steps using the Base model. A compromise between detail and time.").font(.caption).foregroundStyle(.secondary)
+                Text(app.settings.quality == .fast ? "8-step distilled adapter. Requires its optional download." : app.settings.quality == .best ? "Official settings: 50 steps, guidance 3, shift 5, negative layer 22 skipped." : "20 steps with the Base model: faster, but below the official 50-step setting used by Best.").font(.caption).foregroundStyle(.secondary)
                 DisclosureGroup("Negative prompt",isExpanded:$negative) {
                     TextField("Things to avoid (optional)",text:$app.settings.negativePrompt,axis:.vertical).lineLimit(2...5).focused($editing).padding(.top,8)
                     if app.settings.guidance == 1 { Text("Guidance is 1, so the negative branch is unused.").font(.caption).foregroundStyle(.secondary) }
