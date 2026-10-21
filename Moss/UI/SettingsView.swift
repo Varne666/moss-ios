@@ -53,7 +53,7 @@ struct ModelControls: View {
                 Text("For a Files folder, choose a folder under On My iPhone and keep the files downloaded. Cloud-only files cannot work offline. iOS may ask you to choose a folder again if access is revoked.").font(.caption).foregroundStyle(.secondary)
                 DisclosureGroup("Model options",isExpanded:$advanced) {
                     VStack(alignment:.leading,spacing:16) {
-                        Button("Verify all files") { models.verify() }
+                        Button("Verify all files") { models.verify(full:true) }
                         Button("Delete model files",role:.destructive) { confirmDelete = true }
                         Text("Deleting the model keeps your gallery. Tap Download afterward to re-download it.").font(.caption).foregroundStyle(.secondary)
                         TextField("Optional mirror manifest URL",text:$manifestURL).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)

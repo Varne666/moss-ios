@@ -90,14 +90,32 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
         guard Int64(size) == file.bytes else { return false }
         return try digest(url) == file.sha256
     }
-    func verify() {
+    /// Size and modification date of a file whose SHA-256 has already been checked. Re-hashing 12 GB on every
+    /// launch would block generation for a minute or more, so unchanged files are trusted after one full check.
+    static func fingerprint(_ url: URL) -> String? {
+        guard let values = try? url.resourceValues(forKeys:[.fileSizeKey,.contentModificationDateKey]),
+              let size = values.fileSize, let date = values.contentModificationDate else { return nil }
+        return "\(size):\(date.timeIntervalSince1970)"
+    }
+    private static func remember(_ path: String, folder: URL) {
+        var records = UserDefaults.standard.dictionary(forKey:"verifiedFingerprints") as? [String:String] ?? [:]
+        records[folder.standardizedFileURL.path + "|" + path] = fingerprint(folder.appendingPathComponent(path))
+        UserDefaults.standard.set(records,forKey:"verifiedFingerprints")
+    }
+    func verify(full: Bool = false) {
         guard !downloading, let manifest else { return }
-        busy = true; ready = false; fastReady = false; message = "Verifying every model file. This can take several minutes."
+        busy = true; ready = false; fastReady = false; message = full ? "Verifying every model file. This can take several minutes." : "Checking model files"
         let location = folder
         io.async {
             var good = Set<String>()
+            let records = UserDefaults.standard.dictionary(forKey:"verifiedFingerprints") as? [String:String] ?? [:]
             for (i,file) in manifest.files.enumerated() {
-                do { if try Self.valid(file,in:location) { good.insert(file.path) } } catch { /* An unreadable file remains missing and can be downloaded again. */ }
+                let url = location.appendingPathComponent(file.path)
+                let key = location.standardizedFileURL.path + "|" + file.path
+                if !full, let known = records[key], let current = Self.fingerprint(url), known == current,
+                   current.hasPrefix("\(file.bytes):") { good.insert(file.path); continue }
+                DispatchQueue.main.async { self.message = "Verifying \(file.path)" }
+                do { if try Self.valid(file,in:location) { good.insert(file.path); Self.remember(file.path,folder:location) } } catch { /* An unreadable file remains missing and can be downloaded again. */ }
                 DispatchQueue.main.async { self.fraction = Double(i+1)/Double(manifest.files.count) }
             }
             DispatchQueue.main.async {
@@ -165,6 +183,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
                     try FileManager.default.createDirectory(at:destination.deletingLastPathComponent(),withIntermediateDirectories:true)
                     if FileManager.default.fileExists(atPath:destination.path) { _ = try FileManager.default.replaceItemAt(destination,withItemAt:staged) }
                     else { try FileManager.default.moveItem(at:staged,to:destination) }
+                    Self.remember(path,folder:destinationFolder)
                     DispatchQueue.main.async {
                         self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths"); self.pendingVerification -= 1
                         self.refreshSpace(); self.finishBackgroundIfPossible()

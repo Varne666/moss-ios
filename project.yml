@@ -41,6 +41,7 @@ targets:
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
+        UIRequiresFullScreen: true
     entitlements:
       path: Moss/Moss.entitlements
       properties:
@@ -49,10 +50,26 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.mossios.app
+        TARGETED_DEVICE_FAMILY: '1'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: 'YES'
         SUPPORTS_MACCATALYST: 'NO'
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: 'NO'
+    dependencies:
+      - package: mlx-swift
+        product: MLX
+  MossCLI:
+    type: tool
+    platform: macOS
+    deploymentTarget: '26.0'
+    sources:
+      - path: CLI
+      - path: Moss/Engine
+      - path: Moss/Models.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.mossios.cli
+        MACOSX_DEPLOYMENT_TARGET: '26.0'
     dependencies:
       - package: mlx-swift
         product: MLX
@@ -68,6 +85,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.mossios.tests
         GENERATE_INFOPLIST_FILE: 'YES'
 schemes:
+  MossCLI:
+    build:
+      targets:
+        MossCLI: all
+    run:
+      config: Release
+    archive:
+      config: Release
   Moss:
     build:
       targets:

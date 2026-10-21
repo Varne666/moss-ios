@@ -1,5 +1,5 @@
 import Foundation
-import UIKit
+import CoreGraphics
 import MLX
 
 struct GenerationProgress {
@@ -9,7 +9,7 @@ struct GenerationProgress {
 }
 final class MossPipeline {
     func generate(settings s: GenerationSettings, folder: URL, manifest: ModelManifest, control: RunControl,
-                  progress: @escaping (GenerationProgress) -> Void) throws -> UIImage {
+                  progress: @escaping (GenerationProgress) -> Void) throws -> CGImage {
         try s.validate(); try control.check()
         Memory.cacheLimit = 64 * 1024 * 1024
         // Leave headroom for UIKit, decoding, and the operating system. This is not a guarantee against jetsam.
@@ -72,7 +72,7 @@ final class MossPipeline {
             } }
             let data = Data(rgba)
             guard let provider = CGDataProvider(data:data as CFData), let cg = CGImage(width:s.width,height:s.height,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:s.width*4,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.last.rawValue),provider:provider,decode:nil,shouldInterpolate:true,intent:.defaultIntent) else { throw MossError.model("The image could not be created. Try a smaller size.") }
-            return UIImage(cgImage:cg)
+            return cg
         }
     }
 }

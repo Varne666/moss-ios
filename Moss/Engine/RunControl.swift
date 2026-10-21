@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 import os
 
 final class RunControl: @unchecked Sendable {
@@ -11,8 +10,10 @@ final class RunControl: @unchecked Sendable {
     func check() throws {
         lock.lock(); let error = stopped; lock.unlock()
         if let error { throw error }
+        #if os(iOS)
         let available = os_proc_available_memory()
         if available > 0 && available < 256 * 1024 * 1024 { throw MossError.memory }
+        #endif
         let thermal = ProcessInfo.processInfo.thermalState
         if thermal == .critical {
             notice?("iPhone needs to cool down. Paused; keep Moss open.")

@@ -47,11 +47,11 @@ import Combine
                         actual.seed = requested.lockedSeed ? requested.seed &+ UInt32(index) : UInt32.random(in:0...UInt32.max)
                         actual.lockedSeed = true
                         let start = Date()
-                        let image = try autoreleasepool {
+                        let image = UIImage(cgImage: try autoreleasepool {
                             try MossPipeline().generate(settings:actual,folder:folder,manifest:manifest,control:run) { value in
                                 Task { @MainActor in self.progress = value }
                             }
-                        }
+                        })
                         let duration = Date().timeIntervalSince(start)
                         // Save each completed image before starting the next one.
                         let semaphore = DispatchSemaphore(value:0)

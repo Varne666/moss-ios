@@ -1,0 +1,65 @@
+name: Real inference check (Mac)
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        default: "A red fox sitting in fresh snow, golden hour, photograph"
+      width:
+        default: "256"
+      height:
+        default: "256"
+      preset:
+        default: "best"
+      steps:
+        default: ""
+      seed:
+        default: "42"
+      label:
+        default: "check"
+permissions:
+  contents: write
+concurrency:
+  group: moss-inference
+  cancel-in-progress: true
+jobs:
+  infer:
+    runs-on: macos-26
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Machine
+        run: |
+          mkdir -p out
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1); sudo xcode-select -s "$XCODE/Contents/Developer"
+          { sw_vers; sysctl -n hw.memsize hw.model machdep.cpu.brand_string; df -h /; system_profiler SPDisplaysDataType; } 2>&1 | tee out/machine.log
+          command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Build harness from the app's engine sources
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild build -project Moss.xcodeproj -scheme MossCLI -configuration Release -destination 'platform=macOS' \
+            -derivedDataPath build/DD CODE_SIGNING_ALLOWED=NO 2>&1 | tee out/cli-build.log | grep -E "error:|BUILD" || true
+          test -x build/DD/Build/Products/Release/MossCLI
+          build/DD/Build/Products/Release/MossCLI --selftest 2>&1 | tee out/selftest.log
+      - name: Download real weights
+        run: |
+          ADAPTER=""; [ "${{ inputs.preset }}" = "fast" ] && ADAPTER="--adapter"
+          python3 scripts/download_models.py "$RUNNER_TEMP/models" $ADAPTER 2>&1 | tee out/download.log
+          df -h / | tee -a out/download.log
+      - name: Generate
+        run: |
+          set -o pipefail
+          STEPS=""; [ -n "${{ inputs.steps }}" ] && STEPS="--steps ${{ inputs.steps }}"
+          /usr/bin/time -l build/DD/Build/Products/Release/MossCLI --models "$RUNNER_TEMP/models" \
+            --manifest Moss/Resources/model-manifest.json --out out/image.png \
+            --prompt "${{ inputs.prompt }}" --width ${{ inputs.width }} --height ${{ inputs.height }} \
+            --preset ${{ inputs.preset }} $STEPS --seed ${{ inputs.seed }} 2>&1 | tee out/generate.log
+      - name: Publish
+        if: always()
+        run: |
+          OUT=$RUNNER_TEMP/pub; rm -rf "$OUT"; git clone -q --depth 1 -b inference-output "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "$OUT" 2>/dev/null || { mkdir -p "$OUT"; git -C "$OUT" init -q -b inference-output; }
+          D="$OUT/${{ github.run_number }}-${{ inputs.label }}"; mkdir -p "$D"; cp -R out/. "$D/"
+          echo "status=${{ job.status }} sha=${{ github.sha }}" > "$D/RESULT.txt"
+          cd "$OUT"; git config user.name moss-ci; git config user.email moss-ci@users.noreply.github.com
+          git add -A; git commit -qm "inference ${{ github.run_number }} ${{ inputs.label }} ${{ job.status }}"
+          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" HEAD:inference-output
