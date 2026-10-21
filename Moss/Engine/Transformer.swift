@@ -69,11 +69,23 @@ final class MossTransformer {
             let r = concatenated([-x[0..., 0..., 0..., 64..<128], x[0..., 0..., 0..., 0..<64]], axis: -1)
             return (x * rope.1 + r * rope.0).transposed(0, 2, 1, 3)
         }
-        return MLXFast.scaledDotProductAttention(
-            queries: rotate(q), keys: rotate(k),
-            values: v.reshaped([1, n, Self.heads, Self.headDim]).transposed(0, 2, 1, 3),
-            scale: 1 / sqrtf(Float(Self.headDim)), mask: MLXFast.ScaledDotProductAttentionMaskMode.none, forceFused: true
-        ).transposed(0, 2, 1, 3).reshaped([1, n, Self.hidden])
+        let queries = rotate(q), keys = rotate(k)
+        let values = v.reshaped([1, n, Self.heads, Self.headDim]).transposed(0, 2, 1, 3)
+        let scale = 1 / sqrtf(Float(Self.headDim))
+        let out: MLXArray
+        if control.usesCPU {
+            // The CPU path materialises the full score matrix, so split the queries to bound memory.
+            var parts: [MLXArray] = []
+            for start in stride(from: 0, to: n, by: 512) {
+                let chunk = queries[0..., 0..., start..<min(start + 512, n), 0...]
+                let part = MLXFast.scaledDotProductAttention(queries: chunk, keys: keys, values: values, scale: scale, mask: MLXFast.ScaledDotProductAttentionMaskMode.none)
+                eval(part); parts.append(part)
+            }
+            out = concatenated(parts, axis: 2)
+        } else {
+            out = MLXFast.scaledDotProductAttention(queries: queries, keys: keys, values: values, scale: scale, mask: MLXFast.ScaledDotProductAttentionMaskMode.none, forceFused: true)
+        }
+        return out.transposed(0, 2, 1, 3).reshaped([1, n, Self.hidden])
     }
 
     private func headNorm(_ x: MLXArray, _ w: Weights, _ name: String) throws -> MLXArray {
@@ -82,6 +94,9 @@ final class MossTransformer {
 
     /// Text embedder output and RoPE tables for one guidance branch. Independent of the timestep and latent.
     func prepare(context: MLXArray, height: Int, width: Int, skipped: Set<Int>) throws -> Branch {
+        try control.compute { try prepareBody(context: context, height: height, width: width, skipped: skipped) }
+    }
+    private func prepareBody(context: MLXArray, height: Int, width: Int, skipped: Set<Int>) throws -> Branch {
         let count = height * width
         let r = rope(height: height, width: width, text: context.shape[1])
         let tr = (r.0[0..., count..., 0..., 0...], r.1[0..., count..., 0..., 0...])
@@ -115,6 +130,7 @@ final class MossTransformer {
     /// One velocity prediction per branch for the shared latent at `time` (σ × 1000). Returns FP32 [1,128,H,W].
     func predict(_ latent: MLXArray, time: Float, branches: [Branch]) throws -> [MLXArray] {
         let height = latent.shape[2], width = latent.shape[3], count = height * width
+        let (mod, head, video) = try control.compute { () throws -> (MLXArray, MLXArray, MLXArray) in
         var embedding: [Float] = []
         let angles = (0..<128).map { Double(time) * pow(10000.0, -Double($0) / 128) }
         embedding += angles.map { Float(cos($0)) }; embedding += angles.map { Float(sin($0)) }
@@ -123,8 +139,11 @@ final class MossTransformer {
         let mod = try base.linear(t, "shared_block_modulation", bits: 8).reshaped([1, 6, Self.hidden])
         let head = try base.linear(t, "video_head_modulation", bits: 8).reshaped([1, 2, Self.hidden])
         let video = try base.linear(latent.reshaped([1, Self.latentChannels, count]).transposed(0, 2, 1).asType(.bfloat16), "video_embedder", bits: 8)
-        var states = branches.map { concatenated([video, $0.text], axis: 1) }
-        eval(states + [mod, head])
+        eval(mod, head, video); return (mod, head, video)
+        }
+        var states = try control.compute { () -> [MLXArray] in
+            let s = branches.map { concatenated([video, $0.text], axis: 1) }; eval(s); return s
+        }
         for i in 0..<Self.layerCount {
             try control.check()
             let active = branches.indices.filter { !branches[$0].skipped.contains(i) }
@@ -133,18 +152,19 @@ final class MossTransformer {
                 let w = try store.load(prefix: "layers.\(i).")
                 let a = try adapter?.load(prefix: "diffusion_model.layers.\(i).")
                 for b in active {
-                    states[b] = try block(states[b], w, a, branches[b].rope, mod)
-                    eval(states[b])
+                    states[b] = try control.compute {
+                        let next = try block(states[b], w, a, branches[b].rope, mod); eval(next); return next
+                    }
                 }
             }
             Memory.clearCache()
         }
-        return try states.map { x in
+        return try states.map { x in try control.compute {
             let normalized = try base.norm(x[0..., 0..<count, 0...], "final_norm_video")
             let y = normalized * (1 + head[0..., 1..<2, 0...]) + head[0..., 0..<1, 0...]
             let out = try base.linear(y, "final_linear_video", bits: 8).transposed(0, 2, 1)
                 .reshaped([1, Self.latentChannels, height, width]).asType(.float32)
             eval(out); return out
-        }
+        } }
     }
 }

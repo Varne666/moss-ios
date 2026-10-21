@@ -1,5 +1,6 @@
 import Foundation
 import os
+import MLX
 
 final class RunControl: @unchecked Sendable {
     private let lock = NSLock()
@@ -13,6 +14,17 @@ final class RunControl: @unchecked Sendable {
     /// iOS forbids GPU work while the app is in the background, so generation waits at the next layer
     /// boundary until Moss is on screen again instead of being cancelled.
     func pause() { lock.lock(); paused = true; lock.unlock() }
+    private var cpu = false
+    /// While Moss is in the background under an iOS continued-processing task, work moves to the CPU:
+    /// iOS does not allow GPU work from background apps on iPhone. Takes effect at the next `compute` scope.
+    func useCPU(_ on: Bool) { lock.lock(); cpu = on; lock.unlock() }
+    var usesCPU: Bool { lock.lock(); defer { lock.unlock() }; return cpu }
+    /// Runs one unit of work (a layer, a decoder stage) on the currently selected device. Callers evaluate
+    /// their results inside the closure, so no lazy GPU work is left pending when the device changes.
+    func compute<R>(_ body: () throws -> R) rethrows -> R {
+        if usesCPU { return try Device.withDefaultDevice(Device(.cpu), body) }
+        return try body()
+    }
     func resume() { lock.lock(); paused = false; lock.unlock() }
     func check() throws {
         lock.lock(); let error = stopped; let isPaused = paused; lock.unlock()

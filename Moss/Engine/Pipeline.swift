@@ -53,14 +53,13 @@ final class MossPipeline {
             for i in 0..<stepCount {
                 try control.check()
                 progress(.init(stage:.sample,index:i,total:stepCount,message:"Step \(i+1) of \(stepCount)"))
-                let velocity: MLXArray = try autoreleasepool {
-                    let outputs = try transformer.predict(latent,time:schedule[i]*1000,branches:branches)
-                    if outputs.count == 2 {
-                        let result = outputs[1] + s.guidance*(outputs[0]-outputs[1]); eval(result); return result
-                    }
-                    return outputs[0]
+                let outputs: [MLXArray] = try autoreleasepool { try transformer.predict(latent,time:schedule[i]*1000,branches:branches) }
+                latent = control.compute {
+                    // FP32 guidance combination and Euler update, exactly as the reference.
+                    let velocity = outputs.count == 2 ? outputs[1] + s.guidance*(outputs[0]-outputs[1]) : outputs[0]
+                    let next = latent + velocity*(schedule[i+1]-schedule[i]); eval(next); return next
                 }
-                latent = latent + velocity*(schedule[i+1]-schedule[i]); eval(latent); Memory.clearCache()
+                Memory.clearCache()
             }
             progress(.init(stage:.sample,index:stepCount,total:stepCount,message:"Step \(stepCount) of \(stepCount)"))
         }

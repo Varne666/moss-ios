@@ -63,10 +63,17 @@ do {
     print("prompt: \(s.prompt)")
     let sampler = PeakSampler(); sampler.start()
     let control = RunControl()
+    // --cpu-steps A-B runs sampling steps A..B (1-based) on the CPU, as the iPhone app does in the background.
+    let cpuRange: ClosedRange<Int>? = argument("--cpu-steps").flatMap { text in
+        let parts = text.split(separator: "-").compactMap { Int($0) }; return parts.count == 2 ? parts[0]...parts[1] : nil }
     let start = Date()
     var last = Date()
     let image = try MossPipeline().generate(settings: s, folder: URL(fileURLWithPath: modelPath), manifest: manifest, control: control) { p in
         let now = Date()
+        if let cpuRange, p.stage == .sample {
+            let cpu = cpuRange.contains(p.index + 1)
+            if cpu != control.usesCPU { control.useCPU(cpu); print("device -> \(cpu ? "CPU" : "GPU") before step \(p.index + 1)") }
+        }
         print(String(format: "[%7.1fs +%6.1fs] %@ footprint=%@", now.timeIntervalSince(start), now.timeIntervalSince(last), p.message, gib(footprintBytes())))
         last = now
     }

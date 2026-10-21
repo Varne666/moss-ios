@@ -13,7 +13,7 @@ final class MossTextEncoder {
     /// to every prompt (positive and negative) before the next layer is read.
     func encode(prompts: [[Int]]) throws -> [MLXArray] {
         try checkLayout()
-        var states: [MLXArray] = try prompts.map { ids in
+        var states: [MLXArray] = try prompts.map { ids in try control.compute {
             var rows: [MLXArray] = []
             for id in ids {
                 let w = try store.read("embed_tokens.weight", row: id)
@@ -23,12 +23,12 @@ final class MossTextEncoder {
                 eval(row); rows.append(row)
             }
             let x = concatenated(rows, axis: 0).reshaped([1, ids.count, 4096]); eval(x); return x
-        }
+        } }
         for index in 0..<32 {
             try control.check()
             try autoreleasepool {
                 let w = try store.load(prefix: "layers.\(index).")
-                for p in states.indices {
+                for p in states.indices { states[p] = try control.compute {
                     let x = states[p]
                     let y = try w.norm(x, "input_layernorm", offset: true)
                     let attn = try (index % 4 == 3 ? fullAttention(y, w) : linearAttention(y, w))
@@ -36,15 +36,15 @@ final class MossTextEncoder {
                     let z = try w.norm(h, "post_attention_layernorm", offset: true)
                     let gate = try w.linear(z, "mlp.gate_proj", bits: 6)
                     let up = try w.linear(z, "mlp.up_proj", bits: 6)
-                    states[p] = try h + w.linear(mossSilu(gate) * up, "mlp.down_proj", bits: 6)
-                    eval(states[p])
-                }
+                    let next = try h + w.linear(mossSilu(gate) * up, "mlp.down_proj", bits: 6)
+                    eval(next); return next
+                } }
             }
             Memory.clearCache()
             progress(index + 1)
         }
         let w = Weights(["norm.weight": try store.read("norm.weight")])
-        return try states.map { x in let result = try w.norm(x, "norm", offset: true); eval(result); return result }
+        return try states.map { x in try control.compute { let result = try w.norm(x, "norm", offset: true); eval(result); return result } }
     }
     /// The engine hard-codes the Qwen3.5 text encoder shape and 6-bit g64 packing; refuse anything else.
     private func checkLayout() throws {
@@ -81,7 +81,7 @@ final class MossTextEncoder {
             let swapped = concatenated([-rot[0...,0...,0...,32..<64], rot[0...,0...,0...,0..<32]], axis: -1)
             return concatenated([rot*c + swapped*s, a[0...,0...,0...,64..<256]], axis: -1)
         }
-        let out = MLXFast.scaledDotProductAttention(queries: rope(q), keys: rope(k), values: v, scale: 1/16, mask: .causal, forceFused: true)
+        let out = MLXFast.scaledDotProductAttention(queries: rope(q), keys: rope(k), values: v, scale: 1/16, mask: .causal, forceFused: !control.usesCPU)
         return try w.linear(out.transposed(0,2,1,3).reshaped([1,n,4096]) * sigmoid(gate), p + "o_proj", bits: 6)
     }
     private func linearAttention(_ x: MLXArray, _ w: Weights) throws -> MLXArray {

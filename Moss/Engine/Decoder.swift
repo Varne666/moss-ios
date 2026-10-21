@@ -87,20 +87,25 @@ final class MossDecoder {
     }
     func decode(_ latent: MLXArray) throws -> MLXArray {
         let h = latent.shape[2], width = latent.shape[3]
-        let z = try latent.asType(.float32) * sqrt(w.get("running_var")+1e-4).reshaped([1,128,1,1]) + w.get("running_mean").reshaped([1,128,1,1])
-        let unpacked = z.reshaped([1,32,2,2,h,width]).transposed(0,4,2,5,3,1).reshaped([1,2*h,2*width,32])
-        var x = try conv(unpacked,"post_quant_conv",padding:0)
-        x = try strips(x,"decoder.conv_in")
-        x = try resnet(x,"decoder.mid_block.resnets.0")
-        x = try attention(x)
-        x = try resnet(x,"decoder.mid_block.resnets.1")
+        var x = try control.compute { () throws -> MLXArray in
+            let z = try latent.asType(.float32) * sqrt(w.get("running_var")+1e-4).reshaped([1,128,1,1]) + w.get("running_mean").reshaped([1,128,1,1])
+            let unpacked = z.reshaped([1,32,2,2,h,width]).transposed(0,4,2,5,3,1).reshaped([1,2*h,2*width,32])
+            let y = try conv(unpacked,"post_quant_conv",padding:0); eval(y); return y
+        }
+        x = try control.compute { try strips(x,"decoder.conv_in") }
+        x = try control.compute { try resnet(x,"decoder.mid_block.resnets.0") }
+        x = try control.compute { try attention(x) }
+        x = try control.compute { try resnet(x,"decoder.mid_block.resnets.1") }
         for i in 0..<4 {
-            for j in 0..<3 { x = try resnet(x,"decoder.up_blocks.\(i).resnets.\(j)"); Memory.clearCache() }
-            if i < 3 { x = try upsample(x,"decoder.up_blocks.\(i).upsamplers.0") }
+            for j in 0..<3 { x = try control.compute { try resnet(x,"decoder.up_blocks.\(i).resnets.\(j)") }; Memory.clearCache() }
+            if i < 3 { x = try control.compute { try upsample(x,"decoder.up_blocks.\(i).upsamplers.0") } }
             progress(i + 1)
         }
-        let stats = try statistics(x)
-        let out = try strips(x,"decoder.conv_out",pre:{ try mossSilu(self.normalize($0,"decoder.conv_norm_out",stats)) })
-        eval(out); return out
+        let out = try control.compute { () throws -> MLXArray in
+            let stats = try statistics(x)
+            let out = try strips(x,"decoder.conv_out",pre:{ try mossSilu(self.normalize($0,"decoder.conv_norm_out",stats)) })
+            eval(out); return out
+        }
+        return out
     }
 }

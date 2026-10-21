@@ -42,6 +42,8 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
         NSSupportsLiveActivities: true
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).generate.*
     entitlements:
       path: Moss/Moss.entitlements
       properties:

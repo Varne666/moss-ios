@@ -6,7 +6,6 @@ let mossActivityTint = Color(red: 0.55, green: 0.68, blue: 0.47)
 /// Ring that fills smoothly toward the estimated finish time without needing app updates.
 struct ProgressRing: View {
     let state: GenerationActivityAttributes.ContentState
-    var lineWidth: CGFloat = 3
     var body: some View {
         Group {
             if state.phase == .running, let end = state.end, end > state.start {
@@ -43,16 +42,16 @@ struct LockScreenView: View {
     let size: String
     var body: some View {
         HStack(spacing: 14) {
-            ProgressRing(state: state, lineWidth: 4).frame(width: 36, height: 36)
+            ProgressRing(state: state).frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 2) {
-                Text(state.phase == .finished ? "Your image is ready" : "Moss is creating your image").font(.headline)
-                Text(state.phase == .paused ? "Paused · open Moss to continue" : "\(state.detail) · \(size)")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                Text(state.phase == .finished ? "Image ready" : "Creating image").font(.headline).lineLimit(1)
+                Text(state.phase == .paused ? "Paused · open Moss" : "\(state.detail) · \(size)")
+                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
             }
             Spacer(minLength: 8)
-            Countdown(state: state).font(.title3.weight(.semibold)).foregroundStyle(mossActivityTint)
-                .multilineTextAlignment(.trailing).frame(maxWidth: 90, alignment: .trailing)
+            Countdown(state: state).font(.title2.weight(.semibold)).foregroundStyle(mossActivityTint)
+                .lineLimit(1).multilineTextAlignment(.trailing).frame(maxWidth: 96, alignment: .trailing)
         }
-        .padding(16)
+        .padding(.horizontal, 18).padding(.vertical, 14)
     }
 }

@@ -60,7 +60,12 @@ struct GenerationClock {
     private var current = GenerationProgress(message: "")
     private var stageStart: [GenerationProgress.Stage: TimeInterval] = [:]
     private var stageEnd: [GenerationProgress.Stage: TimeInterval] = [:]
-    private var stepDurations: [Double] = []
+    private var gpuSteps: [Double] = []
+    private var cpuSteps: [Double] = []
+    private var stepDurations: [Double] {
+        get { usingCPU ? cpuSteps : gpuSteps }
+        set { if usingCPU { cpuSteps = newValue } else { gpuSteps = newValue } }
+    }
     private var lastStepMark: TimeInterval?
     private var decodeMarks: [TimeInterval] = []
     private var pausedAt: TimeInterval?
@@ -72,6 +77,13 @@ struct GenerationClock {
     /// Monotonic run time excluding pauses.
     private func clock(_ now: TimeInterval) -> TimeInterval { now - pausedTotal - (pausedAt.map { now - $0 } ?? 0) }
 
+    /// GPU ↔ CPU switch: step times measured on the other device no longer predict the next ones.
+    mutating func deviceChanged(at now: TimeInterval) {
+        // The step in progress mixes both devices, so it is not measured; timing restarts from here.
+        if current.stage == .sample { lastStepMark = nil }
+        usingCPU.toggle()
+    }
+    private(set) var usingCPU = false
     mutating func pause(at now: TimeInterval) { if pausedAt == nil { pausedAt = now } }
     mutating func resume(at now: TimeInterval) { if let p = pausedAt { pausedTotal += now - p; pausedAt = nil } }
     var paused: Bool { pausedAt != nil }
@@ -103,7 +115,7 @@ struct GenerationClock {
         let recent = usable.suffix(6).sorted()
         return recent[recent.count / 2]
     }
-    private var predictedStep: Double? { measuredStep ?? calibration.stepSeconds(work: plan.stepWork) }
+    private var predictedStep: Double? { measuredStep ?? (usingCPU ? nil : calibration.stepSeconds(work: plan.stepWork)) }
     private var predictedDecode: Double? {
         if let perMP = calibration.decodePerMegapixel { return perMP * Double(plan.pixels) / 1_000_000 }
         return predictedStep.map { $0 * 0.6 }
@@ -155,7 +167,7 @@ struct GenerationClock {
         var c = calibration
         if let s = stageStart[.encode], let e = stageEnd[.encode] ?? stageStart[.prepare] { c.encode[plan.prompts] = e - s }
         if let s = stageStart[.prepare], let e = stageEnd[.prepare] ?? stageStart[.sample] { c.prepare = e - s }
-        if let step = measuredStep {
+        if let step = measuredStep, !usingCPU {
             c.steps.append(.init(work: plan.stepWork, seconds: step))
             c.steps = Array(c.steps.suffix(8))
         }

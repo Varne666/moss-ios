@@ -19,7 +19,7 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_ENV"
           import json
           r = json.load(open('ci/inference.json'))
-          for k, v in {'prompt': 'A red fox sitting in fresh snow, golden hour, photograph', 'width': '256', 'height': '256', 'preset': 'best', 'steps': '', 'seed': '42', 'label': 'check'}.items():
+          for k, v in {'prompt': 'A red fox sitting in fresh snow, golden hour, photograph', 'width': '256', 'height': '256', 'preset': 'best', 'steps': '', 'seed': '42', 'label': 'check', 'extra': ''}.items():
               print(f"REQ_{k.upper()}={str(r.get(k, v)).replace(chr(10), ' ')}")
           PY
       - name: Machine
@@ -49,7 +49,7 @@ jobs:
           /usr/bin/time -l build/DD/Build/Products/Release/MossCLI --models "$RUNNER_TEMP/models" \
             --manifest Moss/Resources/model-manifest.json --out out/image.png \
             --prompt "${{ env.REQ_PROMPT }}" --width ${{ env.REQ_WIDTH }} --height ${{ env.REQ_HEIGHT }} \
-            --preset ${{ env.REQ_PRESET }} $STEPS --seed ${{ env.REQ_SEED }} 2>&1 | tee out/generate.log
+            --preset ${{ env.REQ_PRESET }} $STEPS --seed ${{ env.REQ_SEED }} ${{ env.REQ_EXTRA }} 2>&1 | tee out/generate.log
       - name: Publish
         if: always()
         run: |

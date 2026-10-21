@@ -69,7 +69,7 @@ struct GeneratorView: View {
         GenerationProgressCard(paused:app.paused,runStart:app.runStart,estimatedEnd:app.estimatedEnd,status:statusLine,stageFraction:stageFraction)
     }
     private var statusLine: String {
-        if app.paused { return "Open Moss to keep going. iPhone pauses the GPU in the background." }
+        if app.paused { return "Paused. Keep Moss open to continue." }
         let p = app.progress
         let prefix = app.settings.count > 1 ? "Image \(app.imageNumber) of \(app.settings.count) · " : ""
         switch p.stage {
@@ -182,7 +182,7 @@ struct GenerationProgressCard: View {
                         Spacer()
                         if let fraction { Text(fraction,format:.percent.precision(.fractionLength(0))).font(.title3.weight(.medium)).monospacedDigit().foregroundStyle(mossAccent) }
                     }
-                    ProgressView(value:fraction ?? stageFraction).tint(mossAccent)
+                    MossBar(value:fraction ?? stageFraction).animation(.easeInOut(duration:0.8),value:fraction ?? stageFraction)
                     HStack(alignment:.firstTextBaseline) {
                         Text(status).font(.callout).foregroundStyle(.secondary)
                         Spacer()
@@ -193,5 +193,18 @@ struct GenerationProgressCard: View {
                 .accessibilityLabel([status, fraction.map { "\(Int($0*100)) percent" }, estimatedEnd.map { "about \(durationText($0.timeIntervalSince(now))) left" }].compactMap { $0 }.joined(separator:", "))
             }
         }
+    }
+}
+
+/// Thin rounded progress bar in the app accent (drawn with shapes so it looks identical everywhere).
+struct MossBar: View {
+    let value: Double
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment:.leading) {
+                Capsule().fill(Color.secondary.opacity(0.18))
+                Capsule().fill(mossAccent).frame(width:max(6,geo.size.width*min(1,max(0,value))))
+            }
+        }.frame(height:6).accessibilityHidden(true)
     }
 }
