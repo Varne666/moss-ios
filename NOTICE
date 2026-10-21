@@ -1,0 +1,29 @@
+Moss iOS — experimental native Swift port, 2026.
+
+The inference implementation is a Swift adaptation of MOSS-Image and the
+moss-image-mlx reference port. It is not an official OpenMOSS product.
+
+MOSS-Image: OpenMOSS-Team / OpenMOSS contributors, Apache License 2.0.
+https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base
+https://github.com/OpenMOSS/MOSS-Image
+
+MLX reference port: felix-ab/moss-image-mlx, Apache License 2.0.
+https://github.com/felix-ab/moss-image-mlx
+Includes the decoder strip strategy, scheduler convention, precision handling,
+and CPU noise convention also attributed there to felix-ab/flux3-mlx.
+
+MLX Swift: Copyright Apple Inc., MIT License.
+https://github.com/ml-explore/mlx-swift
+The build obtains MLX Swift and its dependencies from their upstream packages;
+their licenses and notices remain applicable. See Licenses/.
+
+Model exports: VisualInference/MOSS-Image-Base-MLX-8bit and
+VisualInference/MOSS-Image-SFT-MLX-compact, Apache License 2.0.
+8-step adapter: lodestones/MOSS-Image-Base-8-steps-dmd, Apache License 2.0.
+Model file revisions and SHA-256 hashes are in Moss/Resources/model-manifest.json.
+
+Changes in this project: SwiftUI iOS interface, a streamed Swift tensor reader,
+Swift implementations of the text encoder, transformer, scheduler and VAE,
+iOS download and gallery services, build automation, and original icon artwork.
+Quantization and streamed evaluation can change numerical results; output parity
+with the original PyTorch pipeline has not been established on iPhone.

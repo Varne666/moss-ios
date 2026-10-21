@@ -1,0 +1,51 @@
+INSTALL MOSS ON YOUR IPHONE
+
+This is an experimental app. A successful build does not prove that this large
+model will run reliably on your particular iPhone. Start with 512 x 512.
+
+1. On your iPhone, download the GitHub artifact named Moss-iPhone.
+2. Open Files, then Browse, then Downloads. Tap the downloaded ZIP once to
+   unpack it. Open the resulting folder. You should see Moss-unsigned.ipa.
+3. Open your Signulous app or https://www.signulous.com/sign-apps in Safari.
+   Use the signing dashboard for the device you already registered.
+4. Choose Upload, choose Moss-unsigned.ipa from Files, and upload it.
+5. Tap Sign App. When signing finishes, tap Install App, then Install in the
+   iPhone confirmation. Wait for the Moss leaf icon on your Home Screen.
+   The dashboard wording can vary. If you do not see an Upload option, send a
+   screenshot of that screen with your personal details hidden.
+6. Open Moss. You should see Make room for Moss.
+7. Use Wi-Fi. Keep at least 15 GB free for the base download; 17 GB is a more
+   comfortable target with Fast. Keep Moss open for the first verification.
+8. For the first test, leave Include Fast adapter off and tap Download.
+   You should see the current file, percentage, download speed, and time left.
+9. Wait for Model verified - ready offline. This includes reading every file
+   to verify its checksum, so it may take several additional minutes.
+10. Choose 1:1 and Balanced. Type: A green leaf on a white table.
+11. Tap Generate and keep Moss on screen. The first image may take a long time.
+    You should see prompt-reading progress, then numbered sampling steps, then
+    decoding. The finished image should appear and be saved in Gallery.
+12. After a successful test, enable Airplane Mode and generate another image.
+    This confirms offline operation on your phone.
+
+FAST MODE
+Settings -> Model -> Include Fast adapter -> Download Fast adapter.
+After verification, choose Fast on Create. It uses the separate 8-step adapter.
+Its quality with these quantized weights has not been measured on iPhone.
+
+SIGNING AND MEMORY
+The build includes Requested-memory-entitlements.plist beside the IPA. It asks
+for increased memory limit and extended virtual addressing. An unsigned app
+cannot grant itself those permissions, and an extra plist does not grant them.
+Signulous must use a provisioning profile that permits the requested keys and
+include them in the signed app. Its public instructions do not establish whether
+your specific certificate supports them. This project cannot enable unsupported
+entitlements or promise the amount of memory that iOS will allow.
+
+Try the normal Signulous signing process first. The app streams model layers to
+reduce memory use. If it fails with a signing/entitlement error, send the exact
+message. If it closes during generation, try 512 x 512, a short prompt, close
+other apps, and let the phone cool. If that still fails, send the diagnostics
+listed in START-HERE.html. A smaller 256 x 256 Custom test is also available.
+
+Do not uninstall Moss as a first troubleshooting step. Uninstalling can delete
+its gallery and models stored inside the app.

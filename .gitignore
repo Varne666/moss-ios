@@ -1,0 +1,10 @@
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+Tests/tokenizer.json
+__pycache__/
+.ipynb_checkpoints/
+*.ipa
+*.xcresult

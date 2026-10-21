@@ -1,0 +1,48 @@
+{
+  "original_text_shards": [
+    [
+      "OpenMOSS-Team/MOSS-Image-Base",
+      {
+        "text_encoder/model-00001-of-00004.safetensors": "abfaa3d3a8612508c85ee8f6da9c734b862f10298b903765c4ad384177c32b0b",
+        "text_encoder/model-00002-of-00004.safetensors": "9112637fa6bf4d07bafd6ae268852b18d3d0c1242f4ee901c5579006e5bd4894",
+        "text_encoder/model-00003-of-00004.safetensors": "956f1ef51d0cfe610b0d22987c0b7821c36e3ce228abceccef523518bcf079dc",
+        "text_encoder/model-00004-of-00004.safetensors": "9e21d20e8adde88c3e0b65d4a0d251f143d98ee9d52db36b4348361091e4e208"
+      }
+    ],
+    [
+      "OpenMOSS-Team/MOSS-Image-SFT",
+      {
+        "text_encoder/model-00001-of-00004.safetensors": "abfaa3d3a8612508c85ee8f6da9c734b862f10298b903765c4ad384177c32b0b",
+        "text_encoder/model-00002-of-00004.safetensors": "9112637fa6bf4d07bafd6ae268852b18d3d0c1242f4ee901c5579006e5bd4894",
+        "text_encoder/model-00003-of-00004.safetensors": "956f1ef51d0cfe610b0d22987c0b7821c36e3ce228abceccef523518bcf079dc",
+        "text_encoder/model-00004-of-00004.safetensors": "9e21d20e8adde88c3e0b65d4a0d251f143d98ee9d52db36b4348361091e4e208"
+      }
+    ]
+  ],
+  "checkpoint_tensors": {
+    "header-adapter_lora.safetensors.json": {
+      "tensor_count": 756,
+      "tensor_bytes": 1189086192
+    },
+    "header-transformer_model-00002-of-00002.safetensors.json": {
+      "tensor_count": 208,
+      "tensor_bytes": 1201801728
+    },
+    "header-text_encoder_model-00002-of-00002.safetensors.json": {
+      "tensor_count": 352,
+      "tensor_bytes": 2190779776
+    },
+    "header-text_encoder_model-00001-of-00002.safetensors.json": {
+      "tensor_count": 572,
+      "tensor_bytes": 4259577472
+    },
+    "header-transformer_model-00001-of-00002.safetensors.json": {
+      "tensor_count": 778,
+      "tensor_bytes": 4291409408
+    },
+    "header-vae_decoder.safetensors.json": {
+      "tensor_count": 142,
+      "tensor_bytes": 111789964
+    }
+  }
+}

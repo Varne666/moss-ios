@@ -1,0 +1,147 @@
+[
+  {
+    "prompt": "a cat",
+    "formatted": "<|im_start|>user\na cat<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      64,
+      7993,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  },
+  {
+    "prompt": "你好",
+    "formatted": "<|im_start|>user\n你好<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      109266,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  },
+  {
+    "prompt": "A green leaf on a white table.",
+    "formatted": "<|im_start|>user\nA green leaf on a white table.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      32,
+      5983,
+      15463,
+      383,
+      264,
+      4022,
+      1898,
+      13,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  },
+  {
+    "prompt": "  keep spaces  ",
+    "formatted": "<|im_start|>user\nkeep spaces<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      12718,
+      12258,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  },
+  {
+    "prompt": "{\"summary\":{\"caption\":\"Hi\"}}",
+    "formatted": "<|im_start|>user\n{\"summary\":{\"caption\":\"Hi\"}}<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      4754,
+      1648,
+      21624,
+      22622,
+      3147,
+      12675,
+      29958,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  },
+  {
+    "prompt": "A café\n\nwith a sign: MOSS",
+    "formatted": "<|im_start|>user\nA café\n\nwith a sign: MOSS<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      32,
+      50203,
+      271,
+      4058,
+      264,
+      1777,
+      25,
+      11090,
+      1178,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  },
+  {
+    "prompt": "日本語のポスター",
+    "formatted": "<|im_start|>user\n日本語のポスター<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "ids": [
+      248045,
+      846,
+      198,
+      247359,
+      15303,
+      85021,
+      160490,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ]
+  }
+]

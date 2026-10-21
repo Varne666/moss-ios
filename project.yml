@@ -1,0 +1,83 @@
+name: Moss
+options:
+  bundleIdPrefix: org.mossios
+  deploymentTarget:
+    iOS: '26.0'
+  xcodeVersion: '26.6'
+  createIntermediateGroups: true
+packages:
+  mlx-swift:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.32.3
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    SWIFT_STRICT_CONCURRENCY: minimal
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    ENABLE_USER_SCRIPT_SANDBOXING: 'NO'
+    CODE_SIGNING_ALLOWED: 'NO'
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  Moss:
+    type: application
+    platform: iOS
+    sources:
+      - path: Moss
+        excludes:
+          - Info.plist
+          - Moss.entitlements
+    info:
+      path: Moss/Info.plist
+      properties:
+        CFBundleDisplayName: Moss
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSPhotoLibraryAddUsageDescription: Moss saves an image to Photos only when you ask it to, or when automatic saving is enabled.
+        UIFileSharingEnabled: false
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Moss/Moss.entitlements
+      properties:
+        com.apple.developer.kernel.increased-memory-limit: true
+        com.apple.developer.kernel.extended-virtual-addressing: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.mossios.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_EMIT_LOC_STRINGS: 'YES'
+        SUPPORTS_MACCATALYST: 'NO'
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: 'NO'
+    dependencies:
+      - package: mlx-swift
+        product: MLX
+  MossTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Moss
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.mossios.tests
+        GENERATE_INFOPLIST_FILE: 'YES'
+schemes:
+  Moss:
+    build:
+      targets:
+        Moss: all
+        MossTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MossTests
+    archive:
+      config: Release

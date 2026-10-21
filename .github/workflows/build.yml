@@ -1,0 +1,79 @@
+name: Build Moss IPA
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'Design/**', 'notebooks/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: moss-build
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          ls -d /Applications/Xcode*.app
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          mkdir -p build
+          { xcodebuild -version; swift --version; sw_vers; sysctl -n hw.memsize hw.model; xcodebuild -showsdks; } 2>&1 | tee build/env.log
+          command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Prepare project
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_project.py 2>&1 | tee build/validate.log
+          python3 scripts/fetch_test_tokenizer.py
+          xcodegen generate 2>&1 | tee build/xcodegen.log
+      - name: Resolve packages
+        run: |
+          set -o pipefail
+          xcodebuild -resolvePackageDependencies -project Moss.xcodeproj -scheme Moss 2>&1 | tee build/packages.log
+      - name: Build unsigned iPhone app (Release archive)
+        run: |
+          set -o pipefail
+          xcodebuild archive -project Moss.xcodeproj -scheme Moss -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/Moss.xcarchive \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee build/archive.log
+      - name: Run tests on iPhone simulator
+        run: |
+          set -o pipefail
+          DEVICE_ID=$(python3 scripts/pick_simulator.py)
+          echo "Simulator: $DEVICE_ID" | tee build/tests.log
+          xcodebuild test -project Moss.xcodeproj -scheme Moss \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build/DerivedDataSim -resultBundlePath build/MossTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build/tests.log
+      - name: Package IPA
+        run: python3 scripts/package_ipa.py 2>&1 | tee build/package.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Moss-iPhone
+          path: build/Download/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish results to ci-output branch
+        if: always()
+        env:
+          RUN: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+          STATUS: ${{ job.status }}
+        run: |
+          set -u
+          OUT=$RUNNER_TEMP/out; rm -rf "$OUT"; mkdir -p "$OUT/logs"
+          for f in build/*.log; do [ -f "$f" ] && tail -c 400000 "$f" > "$OUT/logs/$(basename "$f")"; done
+          for f in build/*.log; do [ -f "$f" ] && grep -nE "error:|warning: .*(deprecated|unused)|\*\* .* FAILED|Test Case .* failed|XCTAssert" "$f" | head -400 > "$OUT/logs/$(basename "$f" .log).errors.txt"; done
+          cp build/Download/* "$OUT/" 2>/dev/null || true
+          echo "run=$RUN sha=$SHA status=$STATUS" > "$OUT/RESULT.txt"
+          cd "$OUT"
+          git init -q -b ci-output
+          git config user.name "moss-ci"; git config user.email "moss-ci@users.noreply.github.com"
+          git add -A && git commit -qm "CI run $RUN ($STATUS) for $SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-output
