@@ -20,7 +20,7 @@ struct MossOrb: UIViewRepresentable {
         view.scene = context.coordinator.scene
         view.pointOfView = context.coordinator.camera
         view.backgroundColor = .clear
-        view.antialiasingMode = .multisampling4X
+        view.antialiasingMode = .multisampling2X
         view.isJitteringEnabled = false
         view.delegate = context.coordinator
         view.rendersContinuously = !UIAccessibility.isReduceMotionEnabled
@@ -36,7 +36,7 @@ struct MossOrb: UIViewRepresentable {
     func updateUIView(_ view: SCNView, context: Context) {
         context.coordinator.targetEnergy = Float(energy)
         context.coordinator.setProgress(progress)
-        view.preferredFramesPerSecond = busy ? 20 : 60
+        view.preferredFramesPerSecond = busy ? 30 : 60
     }
 
     static func dismantleUIView(_ view: SCNView, coordinator: OrbScene) {
@@ -66,7 +66,7 @@ final class OrbScene: NSObject, SCNSceneRendererDelegate {
         // Orb: a smooth sphere whose surface is displaced by layered waves in a geometry shader, with a
         // fresnel rim in the moss-lime accent.
         let sphere = SCNSphere(radius: 1)
-        sphere.segmentCount = 96
+        sphere.segmentCount = 64
         material.lightingModel = .physicallyBased
         material.diffuse.contents = UIColor(red: 0.10, green: 0.17, blue: 0.10, alpha: 1)
         material.metalness.contents = 0.25
@@ -112,7 +112,7 @@ final class OrbScene: NSObject, SCNSceneRendererDelegate {
         halo.opacity = 0.55
         super.init()
 
-        let cam = SCNCamera(); cam.fieldOfView = 34; cam.wantsHDR = true; cam.bloomIntensity = 0.9; cam.bloomThreshold = 0.6; cam.bloomBlurRadius = 10
+        let cam = SCNCamera(); cam.fieldOfView = 34   // no HDR/bloom: the halo plane gives the glow for free
         camera.camera = cam
         camera.position = SCNVector3(0, 0, 6.4)
         scene.rootNode.addChildNode(camera)
@@ -199,5 +199,55 @@ final class OrbScene: NSObject, SCNSceneRendererDelegate {
             let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
             ctx.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: 128, y: 128), startRadius: 0, endCenter: CGPoint(x: 128, y: 128), endRadius: 128, options: [])
         }
+    }
+}
+
+/// Generating state of the hero. Pure SwiftUI shapes animated by the system render server, so it stays at
+/// full frame rate even while the model keeps the GPU busy, and costs the generation almost nothing.
+struct MossPulse: View {
+    var progress: Double
+    var active: Bool
+    @State private var breathe = false
+    @State private var spin = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let seeds = 24
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [Theme.accent.opacity(0.55), Theme.accentDeep.opacity(0.25), .clear], center: .center, startRadius: 0, endRadius: size * 0.5))
+                    .frame(width: size, height: size)
+                    .scaleEffect(breathe ? 1.04 : 0.94)
+                Circle()
+                    .fill(RadialGradient(colors: [Color(red: 0.86, green: 0.98, blue: 0.62), Theme.accent, Theme.accentDeep, Color(red: 0.08, green: 0.14, blue: 0.08)], center: UnitPoint(x: 0.36, y: 0.32), startRadius: 2, endRadius: size * 0.34))
+                    .frame(width: size * 0.5, height: size * 0.5)
+                    .overlay(Circle().strokeBorder(Theme.accent.opacity(0.6), lineWidth: 1.5).blur(radius: 2))
+                    .shadow(color: Theme.accent.opacity(active ? 0.55 : 0.2), radius: active ? 30 : 12)
+                    .scaleEffect(breathe ? 1.03 : 0.97)
+                ZStack {
+                    ForEach(0..<seeds, id: \.self) { i in
+                        Circle()
+                            .fill(Double(i) < progress * Double(seeds) ? Theme.accent : Color.white.opacity(0.22))
+                            .frame(width: 7, height: 7)
+                            .offset(y: -size * 0.38)
+                            .rotationEffect(.degrees(Double(i) / Double(seeds) * 360))
+                    }
+                }
+                .rotationEffect(.degrees(spin ? 360 : 0))
+                .rotation3DEffect(.degrees(62), axis: (x: 1, y: 0, z: 0.15))
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .onAppear { animate() }
+        .onChange(of: active) { _, _ in animate() }
+        .accessibilityHidden(true)
+    }
+
+    private func animate() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: active ? 1.4 : 2.6).repeatForever(autoreverses: true)) { breathe.toggle() }
+        if !spin { withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) { spin = true } }
     }
 }

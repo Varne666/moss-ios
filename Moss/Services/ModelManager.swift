@@ -112,9 +112,14 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
               let size = values.fileSize, let date = values.contentModificationDate else { return nil }
         return "\(size):\(date.timeIntervalSince1970)"
     }
+    /// The app's own storage path contains a container ID that can change when iOS updates or re-signs the
+    /// app, so it is keyed by name; otherwise unchanged files would be re-verified as if new.
+    static func folderKey(_ folder: URL) -> String {
+        folder.standardizedFileURL.path == AppPaths.models.standardizedFileURL.path ? "moss-app-models" : folder.standardizedFileURL.path
+    }
     private static func remember(_ path: String, folder: URL) {
         var records = UserDefaults.standard.dictionary(forKey:"verifiedFingerprints") as? [String:String] ?? [:]
-        records[folder.standardizedFileURL.path + "|" + path] = fingerprint(folder.appendingPathComponent(path))
+        records[folderKey(folder) + "|" + path] = fingerprint(folder.appendingPathComponent(path))
         UserDefaults.standard.set(records,forKey:"verifiedFingerprints")
     }
     func verify(full: Bool = false) {
@@ -126,15 +131,17 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             let records = UserDefaults.standard.dictionary(forKey:"verifiedFingerprints") as? [String:String] ?? [:]
             for (i,file) in manifest.files.enumerated() {
                 let url = location.appendingPathComponent(file.path)
-                let key = location.standardizedFileURL.path + "|" + file.path
-                if !full, let known = records[key], let current = Self.fingerprint(url), known == current,
-                   current.hasPrefix("\(file.bytes):") { good.insert(file.path); continue }
-                DispatchQueue.main.async { self.message = "Verifying \(file.path)" }
+                let key = Self.folderKey(location) + "|" + file.path
+                // Earlier builds keyed records by the full container path; accept those too (same size and date).
+                let known = records[key] ?? records.first { $0.key.hasSuffix("|" + file.path) && $0.value == Self.fingerprint(url) }?.value
+                if !full, let known, let current = Self.fingerprint(url), known == current,
+                   current.hasPrefix("\(file.bytes):") { good.insert(file.path); Self.remember(file.path,folder:location); continue }
+                DispatchQueue.main.async { self.message = "Checking \(file.path)"; self.checkingPath = file.path }
                 do { if try Self.valid(file,in:location) { good.insert(file.path); Self.remember(file.path,folder:location) } } catch { /* An unreadable file remains missing and can be downloaded again. */ }
                 DispatchQueue.main.async { self.fraction = Double(i+1)/Double(manifest.files.count) }
             }
             DispatchQueue.main.async {
-                self.completed = good; UserDefaults.standard.set(Array(good),forKey:"verifiedPaths"); self.busy = false; self.refreshStatus(); self.refreshSpace()
+                self.completed = good; UserDefaults.standard.set(Array(good),forKey:"verifiedPaths"); self.busy = false; self.checkingPath = nil; self.refreshStatus(); self.refreshSpace()
             }
         }
     }
@@ -165,6 +172,12 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime(); verify(); return
         }
         message = "Downloading \(file.path)"; started = Date()
+        // A complete file already in place (from an earlier install or an interrupted check) is verified,
+        // never downloaded again.
+        let destination = folder.appendingPathComponent(file.path)
+        if let size = try? destination.resourceValues(forKeys:[.fileSizeKey]).fileSize, Int64(size) == file.bytes {
+            adoptExisting(file); return
+        }
         do {
             let part = partURL(file)
             try FileManager.default.createDirectory(at:part.deletingLastPathComponent(),withIntermediateDirectories:true)
@@ -260,6 +273,19 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             }
             if got == file.bytes { self.retries = 0; self.finished(file) }
             else { self.retries += 1; if self.retries < 6 { self.next() } else { self.fail(MossError.model("The download ended early. Tap Download to resume.")) } }
+        }
+    }
+    private func adoptExisting(_ file: ModelFile) {
+        let destinationFolder = folder, path = file.path
+        pendingVerification += 1; checkingPath = path; message = "Checking \(path)"
+        io.async {
+            let ok = (try? Self.valid(file,in:destinationFolder)) ?? false
+            if ok { Self.remember(path,folder:destinationFolder) } else { try? FileManager.default.removeItem(at:destinationFolder.appendingPathComponent(path)) }
+            DispatchQueue.main.async {
+                self.pendingVerification -= 1; self.checkingPath = nil
+                if ok { self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths"); self.queue.removeAll { $0.path == path } }
+                self.next()
+            }
         }
     }
     private func finished(_ file: ModelFile) {

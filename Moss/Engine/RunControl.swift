@@ -8,6 +8,8 @@ final class RunControl: @unchecked Sendable {
     private var announcedHeat = false
     private var paused = false
     var notice: ((String) -> Void)?
+    /// Called on the worker thread when a thermal pause starts (true) and ends (false).
+    var coolingChanged: ((Bool) -> Void)?
     /// Called on the worker thread when a pause takes effect (true) and when work resumes (false).
     var pauseChanged: ((Bool) -> Void)?
     func cancel(_ reason: MossError = .cancelled) { lock.lock(); stopped = reason; lock.unlock() }
@@ -20,7 +22,22 @@ final class RunControl: @unchecked Sendable {
     /// Moss is on screen (set by the app on every scene change).
     var onScreen: Bool { get { lock.lock(); defer { lock.unlock() }; return visible } set { lock.lock(); visible = newValue; lock.unlock() } }
     /// iOS sent a memory warning: release MLX's buffer cache at the next layer boundary instead of stopping.
-    func trimMemory() { lock.lock(); trimRequested = true; lock.unlock() }
+    func trimMemory() { lock.lock(); trimRequested = true; dropLayers = true; lock.unlock() }
+    private var dropLayers = false
+    /// True once after a memory warning: the transformer releases its in-memory layer cache.
+    func consumeDropLayers() -> Bool { lock.lock(); defer { dropLayers = false; lock.unlock() }; return dropLayers }
+    /// Bytes of transformer weights that may stay in memory between sampling steps (0 = stream every step).
+    /// On iPhone it is what iOS says this app can still use, minus room for activations and the system.
+    func layerCacheBudget(pixels: Int) -> Int64 {
+        if let override = ProcessInfo.processInfo.environment["MOSS_LAYER_CACHE_MB"], let mb = Int64(override) { return mb << 20 }
+        #if os(iOS)
+        let available = Int64(os_proc_available_memory())
+        let activations = Int64(1_200_000_000) + Int64(pixels) * 1_400   // ≈ 2.7 GB at 1 MP, measured on macOS
+        return max(0, available - activations - 900_000_000)
+        #else
+        return 0
+        #endif
+    }
     /// While Moss is in the background under an iOS continued-processing task, work moves to the CPU:
     /// iOS does not allow GPU work from background apps on iPhone. Takes effect at the next `compute` scope.
     func useCPU(_ on: Bool) { lock.lock(); cpu = on; lock.unlock() }
@@ -55,14 +72,16 @@ final class RunControl: @unchecked Sendable {
         #endif
         let thermal = ProcessInfo.processInfo.thermalState
         if thermal == .critical {
-            notice?("iPhone needs to cool down. Paused; keep Moss open.")
+            // Visible pause: the countdown stops and the card says the iPhone is cooling down.
+            coolingChanged?(true)
             while ProcessInfo.processInfo.thermalState == .critical {
                 lock.lock(); let cancelled = stopped; lock.unlock()
-                if let cancelled { throw cancelled }; Thread.sleep(forTimeInterval:0.5)
+                if let cancelled { coolingChanged?(false); throw cancelled }; Thread.sleep(forTimeInterval:0.5)
             }
+            coolingChanged?(false)
         } else if thermal == .serious {
-            if !announcedHeat { notice?("iPhone is warm. Slowing down to let it cool."); announcedHeat = true }
-            Thread.sleep(forTimeInterval:0.15)
+            if !announcedHeat { notice?("iPhone is warm, so Moss is running a little slower."); announcedHeat = true }
+            Thread.sleep(forTimeInterval:0.05)
         } else { announcedHeat = false }
     }
 }

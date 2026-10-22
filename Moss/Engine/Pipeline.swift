@@ -16,7 +16,7 @@ final class MossPipeline {
         try s.validate(); try control.check()
         Memory.cacheLimit = 64 * 1024 * 1024
         // Leave headroom for UIKit, decoding, and the operating system. This is not a guarantee against jetsam.
-        Memory.memoryLimit = min(Int(ProcessInfo.processInfo.physicalMemory / 2), 5 * 1024 * 1024 * 1024)
+        Memory.memoryLimit = Int(ProcessInfo.processInfo.physicalMemory * 3 / 4)
         defer { Memory.clearCache() }
         func store(_ component: String) throws -> TensorStore {
             let urls = manifest.files.filter { $0.component == component && $0.path.hasSuffix(".safetensors") }.map { folder.appendingPathComponent($0.path) }
@@ -43,7 +43,7 @@ final class MossPipeline {
         let schedule = MossSchedule.sigmas(steps:s.steps,shift:s.shift)
         try autoreleasepool {
             let adapter = s.quality == .fast ? try store("adapter") : nil
-            let transformer = try MossTransformer(store:store("transformer"),adapter:adapter,control:control)
+            let transformer = try MossTransformer(store:store("transformer"),adapter:adapter,control:control,cacheBudget:control.layerCacheBudget(pixels:s.width*s.height))
             progress(.init(stage:.prepare,index:0,total:1,message:"Preparing the image model"))
             var branches = [try transformer.prepare(context:contexts.0,height:h,width:w,skipped:[])]
             if let negative = contexts.1 {

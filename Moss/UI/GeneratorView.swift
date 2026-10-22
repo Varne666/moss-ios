@@ -23,10 +23,11 @@ struct GeneratorView: View {
                         Text(message).font(.footnote).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 8)
                     }
                     if app.running {
-                        GenerationProgressCard(paused: app.paused, runStart: app.runStart, estimatedEnd: app.estimatedEnd, status: statusLine, stageFraction: stageFraction)
+                        GenerationProgressCard(paused: app.paused, cooling: app.cooling, onStop: { app.cancel() }, runStart: app.runStart, estimatedEnd: app.estimatedEnd, status: statusLine, stageFraction: stageFraction)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        composer.transition(.opacity)
                     }
-                    composer
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
                 .animation(.spring(response: 0.45, dampingFraction: 0.85), value: app.running)
@@ -72,7 +73,13 @@ struct GeneratorView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else {
             ZStack(alignment: .bottom) {
-                MossOrb(energy: app.running ? (app.paused ? 0.15 : 1) : 0.15, progress: app.running ? orbProgress : nil, busy: app.running)
+                if app.running {
+                    // While the GPU is generating, a render-server animation replaces the 3D scene so the
+                    // orb stays smooth and the model gets the whole GPU.
+                    MossPulse(progress: orbProgress ?? 0, active: !app.paused && !app.cooling)
+                } else {
+                    MossOrb(energy: 0.15, progress: nil, busy: false)
+                }
                 if !app.running {
                     VStack(spacing: 6) {
                         Text(app.preview == nil ? "What should Moss grow?" : "Ready for the next one").font(.system(size: 22, weight: .bold, design: .rounded))
@@ -146,6 +153,7 @@ struct GeneratorView: View {
     private func qualityIcon(_ q: Quality) -> String { q == .fast ? "bolt.fill" : q == .balanced ? "circle.lefthalf.filled" : "sparkles" }
 
     private var statusLine: String {
+        if app.cooling { return "iPhone is hot. Moss continues as soon as it cools." }
         if app.paused { return "Paused. Keep Moss open to continue." }
         let p = app.progress
         let prefix = app.settings.count > 1 ? "Image \(app.imageNumber) of \(app.settings.count) · " : ""
@@ -213,6 +221,8 @@ struct AdvancedSheet: View {
 /// Countdown card shown while an image is being generated.
 struct GenerationProgressCard: View {
     let paused: Bool
+    var cooling = false
+    var onStop: (() -> Void)? = nil
     let runStart: Date
     let estimatedEnd: Date?
     let status: String
@@ -222,10 +232,12 @@ struct GenerationProgressCard: View {
             TimelineView(.periodic(from:.now,by:1)) { context in
                 let now = context.date
                 let total = estimatedEnd.map { $0.timeIntervalSince(runStart) } ?? 0
-                let fraction: Double? = !paused && estimatedEnd != nil && total > 0 ? min(0.99,max(0,now.timeIntervalSince(runStart)/total)) : nil
+                let fraction: Double? = !paused && !cooling && estimatedEnd != nil && total > 0 ? min(0.99,max(0,now.timeIntervalSince(runStart)/total)) : nil
                 VStack(alignment:.leading,spacing:12) {
                     HStack(alignment:.firstTextBaseline) {
-                        if paused {
+                        if cooling {
+                            Text("Cooling down").font(.system(.title,design:.rounded).weight(.semibold))
+                        } else if paused {
                             Text("Paused").font(.system(.largeTitle,design:.rounded).weight(.semibold))
                         } else if let end = estimatedEnd {
                             Text(timerInterval:now...max(now,end),countsDown:true,showsHours:true)
@@ -240,10 +252,15 @@ struct GenerationProgressCard: View {
                     HStack(alignment:.firstTextBaseline) {
                         Text(status).font(.callout).foregroundStyle(.secondary)
                         Spacer()
-                        if let end = estimatedEnd, !paused { Text("Done at \(end.formatted(date:.omitted,time:.shortened))").font(.callout).foregroundStyle(.secondary) }
+                        if let end = estimatedEnd, !paused, !cooling { Text("Done at \(end.formatted(date:.omitted,time:.shortened))").font(.callout).foregroundStyle(.secondary) }
+                    }
+                    if let onStop {
+                        Button(action: onStop) { Label("Stop", systemImage: "stop.fill").frame(maxWidth: .infinity) }
+                            .buttonStyle(GlowButtonStyle(running: true)).padding(.top, 4)
+                            .accessibilityLabel("Stop generating")
                     }
                 }
-                .accessibilityElement(children:.combine)
+                .accessibilityElement(children:.contain)
                 .accessibilityLabel([status, fraction.map { "\(Int($0*100)) percent" }, estimatedEnd.map { "about \(durationText($0.timeIntervalSince(now))) left" }].compactMap { $0 }.joined(separator:", "))
             }
         }

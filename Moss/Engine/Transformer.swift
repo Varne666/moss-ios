@@ -20,9 +20,14 @@ final class MossTransformer {
     let adapter: TensorStore?
     let control: RunControl
     private let base: Weights
+    /// Blocks kept in memory between steps. After the first step, cached blocks cost no storage reads, which
+    /// is most of a step's time on iPhone. Filled up to `cacheBudget` bytes; emptied on a memory warning.
+    private var cache: [Int: (Weights, Weights?)] = [:]
+    private var cachedBytes: Int64 = 0
+    private var cacheBudget: Int64
 
-    init(store: TensorStore, adapter: TensorStore?, control: RunControl) throws {
-        self.store = store; self.adapter = adapter; self.control = control
+    init(store: TensorStore, adapter: TensorStore?, control: RunControl, cacheBudget: Int64 = 0) throws {
+        self.store = store; self.adapter = adapter; self.control = control; self.cacheBudget = cacheBudget
         base = try store.load(prefix: "", excluding: "layers.")
         try Self.checkLayout(store)
     }
@@ -127,6 +132,16 @@ final class MossTransformer {
         return try h + w.linear(mossSitu(hg[0..., 0..., 0..<Self.ffn], hg[0..., 0..., Self.ffn..<(2 * Self.ffn)]), "proj.ffn_down", bits: 8, adapter: a) * mod[0..., 5..<6, 0...]
     }
 
+    private func layer(_ i: Int) throws -> (Weights, Weights?) {
+        if let hit = cache[i] { return hit }
+        let w = try store.load(prefix: "layers.\(i).")
+        let a = try adapter?.load(prefix: "diffusion_model.layers.\(i).")
+        let bytes = Int64(w.values.values.reduce(0) { $0 + $1.nbytes } + (a?.values.values.reduce(0) { $0 + $1.nbytes } ?? 0))
+        if cachedBytes + bytes <= cacheBudget { cache[i] = (w, a); cachedBytes += bytes }
+        return (w, a)
+    }
+    var cachedLayers: Int { cache.count }
+
     /// One velocity prediction per branch for the shared latent at `time` (σ × 1000). Returns FP32 [1,128,H,W].
     func predict(_ latent: MLXArray, time: Float, branches: [Branch]) throws -> [MLXArray] {
         let height = latent.shape[2], width = latent.shape[3], count = height * width
@@ -148,9 +163,9 @@ final class MossTransformer {
             try control.check()
             let active = branches.indices.filter { !branches[$0].skipped.contains(i) }
             if active.isEmpty { continue }
+            if control.consumeDropLayers() { cache.removeAll(); cachedBytes = 0; cacheBudget = 0; Memory.clearCache() }
             try autoreleasepool {
-                let w = try store.load(prefix: "layers.\(i).")
-                let a = try adapter?.load(prefix: "diffusion_model.layers.\(i).")
+                let (w, a) = try layer(i)
                 for b in active {
                     states[b] = try control.compute {
                         let next = try block(states[b], w, a, branches[b].rope, mod); eval(next); return next

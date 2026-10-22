@@ -14,6 +14,9 @@ import Combine
     @Published var runStart = Date()
     @Published var estimatedEnd: Date?
     @Published var paused = false
+    /// The iPhone reported critical heat; work waits until it cools (countdown stopped).
+    @Published var cooling = false
+    private var ticker: Task<Void, Never>?
     @Published var imageNumber = 1
     private var clock: GenerationClock?
     private let activity = LiveActivityController()
@@ -51,6 +54,15 @@ import Combine
             run.notice = { [weak self] text in Task { @MainActor in self?.message = text } }
             continuation.expired = { [weak self] in self?.continuationExpired() }
             continuation.begin(subtitle: "\(requested.width) × \(requested.height) · \(requested.quality.rawValue)")
+            run.coolingChanged = { [weak self] hot in let now = Date(); Task { @MainActor in self?.coolingTookEffect(hot, at: now) } }
+            ticker?.cancel()
+            ticker = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    guard let self else { return }
+                    if self.running && !self.paused && !self.cooling { self.refreshEstimate() }
+                }
+            }
             run.pauseChanged = { [weak self] isPaused in let now = Date(); Task { @MainActor in self?.pauseTookEffect(isPaused, at: now) } }
             worker.async {
                 do {
@@ -142,7 +154,14 @@ import Combine
         var label = settings.count > 1 ? "Image \(imageNumber) · \(detail)" : detail
         if backgroundCPU { label += " · slower in background" }
         let fraction = clock?.fraction(at:Date().timeIntervalSinceReferenceDate) ?? 0
-        return .init(phase: paused ? .paused : (estimatedEnd == nil ? .estimating : .running), detail:label, start:runStart, end:estimatedEnd, fraction:fraction)
+        if cooling { label = "Cooling down" }
+        return .init(phase: paused || cooling ? .paused : (estimatedEnd == nil ? .estimating : .running), detail:label, start:runStart, end:estimatedEnd, fraction:fraction)
+    }
+    private func coolingTookEffect(_ hot: Bool, at now: Date) {
+        guard running else { return }
+        cooling = hot
+        if hot { clock?.pause(at:now.timeIntervalSinceReferenceDate) } else if !paused { clock?.resume(at:now.timeIntervalSinceReferenceDate) }
+        refreshEstimate(); activity.update(activityState(),force:true)
     }
     private func pauseTookEffect(_ isPaused: Bool, at now: Date) {
         paused = isPaused
@@ -188,6 +207,7 @@ import Combine
         let ok = error == nil
         activity.end(state:.init(phase: ok ? .finished : .failed, detail: ok ? "Saved to your gallery" : "Stopped", start:runStart, end:Date(), fraction: ok ? 1 : 0))
         continuation.end(success: ok)
+        ticker?.cancel(); ticker = nil; cooling = false
         clock = nil; estimatedEnd = nil; paused = false; backgroundCPU = false
         running = false; control = nil; UIApplication.shared.isIdleTimerDisabled = false
         UserDefaults.standard.set(false,forKey:"generationInProgress")

@@ -129,7 +129,14 @@ struct GenerationClock {
             return nil
         }
         let decode = predictedDecode ?? step * 0.6
-        let sampling = { (doneSteps: Int, sinceMark: Double) in max(0, Double(plan.steps - doneSteps) * step - sinceMark) }
+        // A step that is already taking longer than predicted means steps are slower now (heat, other apps):
+        // use the slower pace for the rest, and never let the current step's remainder fall to zero.
+        let sampling = { (doneSteps: Int, sinceMark: Double) -> Double in
+            let left = plan.steps - doneSteps
+            guard left > 0 else { return 0 }
+            let pace = max(step, sinceMark)
+            return max(pace - sinceMark, pace * 0.15) + Double(left - 1) * pace
+        }
         switch current.stage {
         case .starting:
             guard let encode = calibration.encode[plan.prompts] else { return nil }

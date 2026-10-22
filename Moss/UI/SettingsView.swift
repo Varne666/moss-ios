@@ -89,7 +89,7 @@ struct SettingsView: View {
             }
             Section("Gallery") { Button("Clear gallery",role:.destructive) { clear = true }.disabled(app.running || gallery.items.isEmpty) }
             Section("About") {
-                LabeledContent("Version",value:"1.0.0 · experimental")
+                LabeledContent("Version",value:"1.0.1 (2)")
                 Text("Offline generation. No analytics, tracking, or app account. Network access is used to download model files only.").font(.callout)
                 Text("iPhone inference has not been validated by the project author on a physical device. A smaller image uses less memory. Keep the app open while generating.").font(.caption).foregroundStyle(.secondary)
                 Link("MOSS model and license",destination:URL(string:"https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base")!)

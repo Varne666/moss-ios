@@ -29,7 +29,7 @@ struct Countdown: View {
                 Text(timerInterval: Date()...end, countsDown: true, showsHours: true).monospacedDigit()
             } else { Text("Almost") }
         case .estimating: Text("Timing…")
-        case .paused: Text("Paused")
+        case .paused: Text(state.detail == "Cooling down" ? "Cooling" : "Paused")
         case .finished: Text("Done")
         case .failed: Text("Stopped")
         }
@@ -45,7 +45,7 @@ struct LockScreenView: View {
             ProgressRing(state: state).frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text(state.phase == .finished ? "Image ready" : "Creating image").font(.headline).lineLimit(1)
-                Text(state.phase == .paused ? "Paused · open Moss" : "\(state.detail) · \(size)")
+                Text(state.phase == .paused ? (state.detail == "Cooling down" ? "iPhone is hot · resumes when cool" : "Paused · open Moss") : "\(state.detail) · \(size)")
                     .font(.subheadline).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
             }
             Spacer(minLength: 8)

@@ -36,7 +36,7 @@ struct SetupView: View {
             MossOrb(energy: models.downloading ? 0.55 : 0.1, progress: models.downloading ? overallFraction : nil, busy: false)
                 .frame(height: 230)
             VStack(spacing: 8) {
-                Text(models.ready ? "Moss is ready" : "Grow Moss on your iPhone").font(.system(size: 30, weight: .bold, design: .rounded))
+                Text(models.ready ? "Moss is ready" : models.busy && !models.downloading ? "Checking your model" : "Grow Moss on your iPhone").font(.system(size: 30, weight: .bold, design: .rounded))
                 Text("A one-time \(AppPaths.bytes(wantedBytes)) download. After that every image is made on this iPhone, offline.")
                     .font(.callout).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
             }
@@ -198,7 +198,8 @@ struct SetupView: View {
             .buttonStyle(GlowButtonStyle(running: models.downloading))
             .disabled(models.busy && !models.downloading || app.running)
             if models.cellular { Label("You're on cellular or a metered network.", systemImage: "antenna.radiowaves.left.and.right").font(.caption).foregroundStyle(.orange) }
-            Text(models.downloading ? "Keep Moss open while it downloads. If you leave, it picks up where it stopped." : models.message)
+            Text(models.downloading ? "Keep Moss open while it downloads. If you leave, it picks up where it stopped."
+                 : models.busy ? "Checking the files already on this iPhone. Nothing is downloaded again." : models.message)
                 .font(.caption).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
         }
         .padding(18).glassPanel()

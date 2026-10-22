@@ -84,6 +84,7 @@ do {
     guard CGImageDestinationFinalize(dest) else { throw MossError.model("Cannot finalize PNG") }
     print(String(format: "DONE total=%.1fs", total))
     print("peak process footprint (50 ms sampling): \(gib(sampler.peak))")
+    print("layer cache budget: \(ProcessInfo.processInfo.environment["MOSS_LAYER_CACHE_MB"] ?? "0") MB")
     print("MLX peak active memory: \(gib(UInt64(Memory.peakMemory)))")
 } catch {
     print("FAILED: \(error.localizedDescription)")
