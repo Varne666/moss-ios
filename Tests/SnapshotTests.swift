@@ -35,4 +35,16 @@ import SwiftUI
         }.padding(.horizontal, 14).frame(width: 250, height: 37).background(Capsule().fill(.black)).environment(\.colorScheme, .dark)
         try render("island-compact", island, width: 280, dark: true)
     }
+
+    func testScreensRender() throws {
+        let models = ModelManager(), gallery = GalleryStore()
+        let app = AppModel(models: models, gallery: gallery)
+        models.downloading = true; models.busy = true
+        models.currentPath = "transformer/model-00001-of-00002.safetensors"
+        models.currentReceived = 1_620_000_000; models.speed = 38_000_000
+        try render("setup-downloading", SetupView().environmentObject(models).environmentObject(app).environmentObject(gallery), width: 390, dark: true)
+        models.downloading = false; models.busy = false; models.currentPath = nil; models.ready = true
+        app.settings.prompt = "A cozy reading nook by a rainy window, warm lamp light"
+        try render("create-ready", GeneratorView().environmentObject(models).environmentObject(app).environmentObject(gallery).frame(height: 780), width: 390, dark: true)
+    }
 }

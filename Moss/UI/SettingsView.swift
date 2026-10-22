@@ -1,18 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct SetupView: View {
-    @EnvironmentObject var models: ModelManager
-    var body: some View {
-        VStack(alignment:.leading,spacing:24) {
-            Image(systemName:"leaf").font(.system(size:48,weight:.light)).foregroundStyle(mossAccent).accessibilityHidden(true)
-            Text("Make room for Moss").font(.largeTitle.bold())
-            Text("Download the model once. After that, your prompts and images stay on this iPhone, even without internet.").font(.body).foregroundStyle(.secondary)
-            Text("This is an experimental iPhone port. Start with a small image; generation can be slow.").font(.callout).foregroundStyle(.secondary)
-            MossCard { ModelControls() }
-        }.padding(.vertical,16)
-    }
-}
 struct ModelControls: View {
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var app: AppModel
@@ -107,7 +95,7 @@ struct SettingsView: View {
                 Link("MOSS model and license",destination:URL(string:"https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base")!)
                 Link("MLX conversion source",destination:URL(string:"https://github.com/felix-ab/moss-image-mlx")!)
             }
-        }.navigationTitle("Settings")
+        }.navigationTitle("Settings").scrollContentBackground(.hidden).background(Theme.canvas)
             .confirmationDialog("Delete every image in Moss?",isPresented:$clear,titleVisibility:.visible) {
                 Button("Delete all images",role:.destructive) { gallery.delete(Set(gallery.items.map(\.id))) }
             } message: { Text("This cannot be undone. Copies you saved to Photos are kept.") }

@@ -18,19 +18,27 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     @Published var cellular = false
     @Published var folder = AppPaths.models
     @Published var freeBytes: Int64 = 0
+    /// File currently streaming, its bytes on disk, and a smoothed download speed (bytes/s).
+    @Published var currentPath: String?
+    @Published var currentReceived: Int64 = 0
+    @Published var speed: Double = 0
+    /// File being SHA-256 checked after download.
+    @Published var checkingPath: String?
+    @Published private(set) var wantedFast = false
     /// Earlier builds used a background URLSession; iOS may still deliver its events once. Nothing to finish.
     var backgroundCompletion: (() -> Void)? { didSet { backgroundCompletion?(); backgroundCompletion = nil } }
     private var completed = Set<String>()
+    var completedPaths: Set<String> { completed }
     private var active: URLSessionDataTask?
     private var handle: FileHandle?
     private var currentFile: ModelFile?
     private var received: Int64 = 0
     private var retries = 0
     private var lastUIUpdate = Date.distantPast
+    private var lastUIBytes: Int64 = 0
     private var resumeWhenActive = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var queue: [ModelFile] = []
-    private var wantedFast = false
     private var allowCellular = false
     private var paused = false
     private var securityURL: URL?
@@ -147,13 +155,13 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
         next()
     }
     private func partURL(_ file: ModelFile) -> URL { folder.appendingPathComponent(file.path + ".part") }
-    private func partialBytes(_ file: ModelFile) -> Int64 {
+    func partialBytes(_ file: ModelFile) -> Int64 {
         Int64((try? partURL(file).resourceValues(forKeys:[.fileSizeKey]).fileSize) ?? 0)
     }
     private func next() {
         guard !paused else { return }
         guard let file = queue.first else {
-            downloading = false; busy = false; active = nil; currentFile = nil
+            downloading = false; busy = false; active = nil; currentFile = nil; currentPath = nil; speed = 0
             UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime(); verify(); return
         }
         message = "Downloading \(file.path)"; started = Date()
@@ -169,6 +177,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             fraction = Double(have)/Double(max(1,file.bytes))
             if have == file.bytes { try writer.close(); finished(file); return }
             handle = writer; currentFile = file
+            currentPath = file.path; currentReceived = have; lastUIBytes = have; lastUIUpdate = Date()
             var request = URLRequest(url:file.url)
             request.allowsCellularAccess = allowCellular
             if have > 0 { request.setValue("bytes=\(have)-",forHTTPHeaderField:"Range") }
@@ -178,7 +187,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     }
     func pause() {
         guard let task = active else { return }
-        paused = true; task.cancel()
+        paused = true; task.cancel(); currentPath = nil; speed = 0
         active = nil; downloading = false; busy = false; message = "Download paused. Tap Download to resume."
         UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
     }
@@ -216,12 +225,16 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
         catch { dataTask.cancel(); DispatchQueue.main.async { self.fail(MossError.model("Moss could not save the download: \(error.localizedDescription)")) }; return }
         let now = Date()
         guard now.timeIntervalSince(lastUIUpdate) > 0.3, let file = currentFile else { return }
-        lastUIUpdate = now
+        let interval = now.timeIntervalSince(lastUIUpdate), delta = received - lastUIBytes
+        lastUIUpdate = now; lastUIBytes = received
         let got = received, base = initialBytes, since = started
         DispatchQueue.main.async {
             self.fraction = Double(got)/Double(max(1,file.bytes))
+            self.currentReceived = got
             self.bytesPerSecond = Double(max(0,got-base))/max(1,now.timeIntervalSince(since))
-            self.remainingSeconds = self.bytesPerSecond > 0 ? Double(file.bytes-got)/self.bytesPerSecond : nil
+            let instant = Double(max(0,delta))/max(0.05,interval)
+            self.speed = self.speed == 0 ? instant : self.speed * 0.9 + instant * 0.1
+            self.remainingSeconds = self.speed > 0 ? Double(file.bytes-got)/self.speed : nil
         }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -251,7 +264,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     }
     private func finished(_ file: ModelFile) {
         let part = partURL(file), destinationFolder = folder, path = file.path
-        pendingVerification += 1; message = "Checking \(file.path)"; currentFile = nil
+        pendingVerification += 1; message = "Checking \(file.path)"; currentFile = nil; checkingPath = file.path; currentPath = nil
         io.async {
             do {
                 let size = try part.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0
@@ -264,15 +277,16 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
                 else { try FileManager.default.moveItem(at:part,to:destination) }
                 Self.remember(path,folder:destinationFolder)
                 DispatchQueue.main.async {
-                    self.pendingVerification -= 1
+                    self.pendingVerification -= 1; self.checkingPath = nil
                     self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths")
                     self.queue.removeAll { $0.path == path }
                     self.refreshSpace(); self.next()
                 }
-            } catch { DispatchQueue.main.async { self.pendingVerification -= 1; self.fail(error) } }
+            } catch { DispatchQueue.main.async { self.pendingVerification -= 1; self.checkingPath = nil; self.fail(error) } }
         }
     }
     private func fail(_ error: Error) {
+        currentPath = nil; speed = 0
         self.error = error.localizedDescription; busy = false; downloading = false; active?.cancel(); active = nil; currentFile = nil
         message = "Download needs attention"; UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
     }
@@ -361,5 +375,17 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             let value = try JSONDecoder().decode(ModelManifest.self,from:data); try value.validate()
             await MainActor.run { UserDefaults.standard.set(data,forKey:"manifest"); self.manifest = value; self.busy = false; self.verify() }
         } catch { await MainActor.run { self.busy = false; self.error = error.localizedDescription } }
+    }
+}
+
+extension ModelManager {
+    enum FileState: Equatable { case done, downloading(Int64), checking, queued(Int64), missing(Int64) }
+    /// Display state of one manifest file for the download list.
+    func state(of file: ModelFile) -> FileState {
+        if completedPaths.contains(file.path) { return .done }
+        if checkingPath == file.path { return .checking }
+        if currentPath == file.path { return .downloading(currentReceived) }
+        let partial = partialBytes(file)
+        return downloading && (!file.optional || wantedFast) ? .queued(partial) : .missing(partial)
     }
 }

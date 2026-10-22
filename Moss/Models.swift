@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 
-let mossAccent = Color(red: 0.36, green: 0.46, blue: 0.32)
 
 enum MossError: LocalizedError {
     case model(String), cancelled, memory, background

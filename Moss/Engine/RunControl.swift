@@ -15,6 +15,12 @@ final class RunControl: @unchecked Sendable {
     /// boundary until Moss is on screen again instead of being cancelled.
     func pause() { lock.lock(); paused = true; lock.unlock() }
     private var cpu = false
+    private var trimRequested = false
+    private var visible = true
+    /// Moss is on screen (set by the app on every scene change).
+    var onScreen: Bool { get { lock.lock(); defer { lock.unlock() }; return visible } set { lock.lock(); visible = newValue; lock.unlock() } }
+    /// iOS sent a memory warning: release MLX's buffer cache at the next layer boundary instead of stopping.
+    func trimMemory() { lock.lock(); trimRequested = true; lock.unlock() }
     /// While Moss is in the background under an iOS continued-processing task, work moves to the CPU:
     /// iOS does not allow GPU work from background apps on iPhone. Takes effect at the next `compute` scope.
     func useCPU(_ on: Bool) { lock.lock(); cpu = on; lock.unlock() }
@@ -40,8 +46,12 @@ final class RunControl: @unchecked Sendable {
             pauseChanged?(false)
         }
         #if os(iOS)
+        // Only a real shortage on screen ends the run. In the background iOS reports a much smaller
+        // allowance (and sends memory warnings) even though the run can safely continue or pause, so it is
+        // never treated as an error there.
+        if trimRequested { Memory.clearCache(); lock.lock(); trimRequested = false; lock.unlock() }
         let available = os_proc_available_memory()
-        if available > 0 && available < 256 * 1024 * 1024 { throw MossError.memory }
+        if onScreen && available > 0 && available < 96 * 1024 * 1024 { throw MossError.memory }
         #endif
         let thermal = ProcessInfo.processInfo.thermalState
         if thermal == .critical {

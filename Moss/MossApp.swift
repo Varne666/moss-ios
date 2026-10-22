@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
     var body: some Scene {
         WindowGroup {
-            RootView().environmentObject(models).environmentObject(gallery).environmentObject(app).tint(mossAccent)
+            RootView().environmentObject(models).environmentObject(gallery).environmentObject(app).tint(Theme.accent).preferredColorScheme(.dark)
                 .onChange(of:phase) { _,value in if value == .active { app.returnedToScreen(); models.resumeIfInterrupted() } else { app.leftScreen() } }
                 .onReceive(NotificationCenter.default.publisher(for:UIApplication.didReceiveMemoryWarningNotification)) { _ in app.memoryWarning() }
         }

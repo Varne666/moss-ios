@@ -1,6 +1,6 @@
 import SwiftUI
 
-let mossActivityTint = Color(red: 0.55, green: 0.68, blue: 0.47)
+let mossActivityTint = Color(red: 0.79, green: 0.95, blue: 0.36)
 
 
 /// Ring that fills smoothly toward the estimated finish time without needing app updates.

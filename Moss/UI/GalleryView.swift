@@ -41,7 +41,7 @@ struct GalleryView: View {
                     }.padding(16)
                 }
             }
-        }.navigationTitle("Gallery").background(Color(uiColor:.systemGroupedBackground))
+        }.navigationTitle("Gallery").background(Theme.canvas)
             .toolbar {
                 ToolbarItem(placement:.topBarLeading) { Button { favorites.toggle() } label: { Image(systemName:favorites ? "heart.fill" : "heart") }.accessibilityLabel(favorites ? "Show all images" : "Show favorites") }
                 ToolbarItem(placement:.topBarTrailing) { Button(selecting ? "Done" : "Select") { selecting.toggle(); selection = [] }.disabled(gallery.items.isEmpty) }

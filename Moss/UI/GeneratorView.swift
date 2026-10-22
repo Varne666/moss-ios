@@ -1,82 +1,160 @@
 import SwiftUI
 import UIKit
 
+/// Create screen: 3D hero (or the finished image), live countdown, and a studio-style composer.
 struct GeneratorView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var models: ModelManager
-    @State private var advanced = false
-    @State private var negative = false
-    @State private var custom = false
+    @State private var showAdvanced = false
+    @State private var showImage = true
     @FocusState private var editing: Bool
-    private let ratios = AspectPreset.all.map { ($0.label,$0.width,$0.height) }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing:16) {
-                if !models.ready {
-                    SetupView()
-                } else {
-                    preview
-                    if let message = app.message {
-                        Text(message).font(.callout).foregroundStyle(.secondary).frame(maxWidth:.infinity,alignment:.leading)
-                    }
-                    if app.running { progress }
-                    controls.disabled(app.running)
-                }
-            }.padding(16)
-        }
-        .background(Color(uiColor:.systemGroupedBackground))
-        .navigationTitle("Moss")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge:.bottom) {
-            if models.ready {
-                VStack(spacing:12) {
-                    if !app.running {
-                        TextField("Describe your image, or paste a JSON layout…",text:$app.settings.prompt,axis:.vertical)
-                            .lineLimit(2...6).padding(16).background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:20))
-                            .focused($editing).accessibilityLabel("Image prompt").autocorrectionDisabled()
-                    }
-                    Button {
-                        editing = false
-                        if app.running { app.cancel() } else {
-                            app.settings.width = max(256,min(1536,Int((Double(app.settings.width)/16).rounded())*16))
-                            app.settings.height = max(256,min(1536,Int((Double(app.settings.height)/16).rounded())*16))
-                            app.generate()
-                        }
-                    } label: {
-                        Label(app.running ? "Cancel" : "Generate",systemImage:app.running ? "stop" : "leaf")
-                            .font(.headline).frame(maxWidth:.infinity).padding(.vertical,8)
-                    }.buttonStyle(.borderedProminent).controlSize(.large).disabled(models.busy)
-                }.padding(16).background(.bar)
-            }
-        }
-        .toolbar { ToolbarItemGroup(placement:.keyboard) { Spacer(); Button("Done") { editing = false } } }
-    }
-    private var preview: some View {
-        Group {
-            if let image = app.preview {
-                Image(uiImage:image).resizable().scaledToFit().accessibilityLabel("Last generated image")
+        ZStack {
+            Theme.canvas.ignoresSafeArea()
+            RadialGradient(colors: [Theme.accentDeep.opacity(0.35), .clear], center: .top, startRadius: 0, endRadius: 420).ignoresSafeArea()
+            if !models.ready {
+                ScrollView { SetupView().padding(16).padding(.bottom, 90) }.scrollIndicators(.hidden)
             } else {
-                VStack(spacing:16) {
-                    Image(systemName:"leaf").font(.system(size:44,weight:.light)).foregroundStyle(mossAccent).accessibilityHidden(true)
-                    Text(app.running ? "Your image is on its way" : "A little space for your imagination").font(.title3).multilineTextAlignment(.center)
-                    Text(app.running ? "Keep Moss open while it works. Your first image also teaches Moss how fast this iPhone is, so later countdowns start right away." : "Describe a scene below to begin.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                }.padding(32).frame(maxWidth:.infinity,minHeight:240)
+                VStack(spacing: 14) {
+                    header
+                    hero.frame(maxHeight: .infinity)
+                    if let message = app.message, !app.running {
+                        Text(message).font(.footnote).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 8)
+                    }
+                    if app.running {
+                        GenerationProgressCard(paused: app.paused, runStart: app.runStart, estimatedEnd: app.estimatedEnd, status: statusLine, stageFraction: stageFraction)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    composer
+                }
+                .padding(.horizontal, 16).padding(.bottom, 8)
+                .animation(.spring(response: 0.45, dampingFraction: 0.85), value: app.running)
             }
-        }.clipShape(RoundedRectangle(cornerRadius:24,style:.continuous))
-            .background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:24))
+        }
+        .foregroundStyle(Theme.textPrimary)
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showAdvanced) { AdvancedSheet().environmentObject(app).presentationDetents([.medium, .large]).presentationBackground(Theme.panel) }
     }
-    private var progress: some View {
-        GenerationProgressCard(paused:app.paused,runStart:app.runStart,estimatedEnd:app.estimatedEnd,status:statusLine,stageFraction:stageFraction)
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack {
+            Text("Moss").font(.system(size: 26, weight: .bold, design: .rounded))
+            Spacer()
+            HStack(spacing: 6) {
+                Circle().fill(app.running ? Theme.accent : Theme.accentDeep).frame(width: 7, height: 7)
+                Text(app.running ? (app.backgroundCPU ? "Working slowly" : "Generating") : "Offline · Ready").font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal, 10).frame(height: 28).background(Theme.raised, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.hairline))
+        }
+        .padding(.top, 6)
     }
+
+    // MARK: Hero
+
+    @ViewBuilder private var hero: some View {
+        if let image = app.preview, showImage, !app.running {
+            Image(uiImage: image).resizable().scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Theme.hairline))
+                .shadow(color: .black.opacity(0.5), radius: 24, y: 12)
+                .overlay(alignment: .topTrailing) {
+                    Button { withAnimation { showImage = false } } label: {
+                        Image(systemName: "cube.transparent").font(.system(size: 14, weight: .semibold)).frame(width: 34, height: 34)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }.padding(10).accessibilityLabel("Show the 3D orb")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Last generated image")
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        } else {
+            ZStack(alignment: .bottom) {
+                MossOrb(energy: app.running ? (app.paused ? 0.15 : 1) : 0.15, progress: app.running ? orbProgress : nil, busy: app.running)
+                if !app.running {
+                    VStack(spacing: 6) {
+                        Text(app.preview == nil ? "What should Moss grow?" : "Ready for the next one").font(.system(size: 22, weight: .bold, design: .rounded))
+                        Text("Drag the orb. Describe anything below.").font(.footnote).foregroundStyle(Theme.textSecondary)
+                        if app.preview != nil {
+                            Button("Show last image") { withAnimation { showImage = true } }.font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent).padding(.top, 2)
+                        }
+                    }.padding(.bottom, 8)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.opacity)
+        }
+    }
+    private var orbProgress: Double? {
+        guard let end = app.estimatedEnd else { return stageFraction }
+        let total = end.timeIntervalSince(app.runStart)
+        return total > 0 ? min(1, max(0, Date().timeIntervalSince(app.runStart) / total)) : nil
+    }
+
+    // MARK: Composer
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !app.running {
+                TextField("", text: $app.settings.prompt, prompt: Text("Describe your image, or paste a JSON layout…").foregroundStyle(Theme.textMuted), axis: .vertical)
+                    .lineLimit(1...5).font(.system(size: 17)).tint(Theme.accent)
+                    .focused($editing).autocorrectionDisabled().submitLabel(.return)
+                    .accessibilityLabel("Image prompt")
+                    .padding(.horizontal, 4).padding(.top, 4)
+            }
+            HStack(spacing: 8) {
+                if !app.running {
+                    Menu {
+                        ForEach(AspectPreset.all, id: \.label) { entry in
+                            Button { app.settings.width = entry.width; app.settings.height = entry.height } label: {
+                                if currentAspect == entry.label { Label("\(entry.label)  ·  \(entry.width)×\(entry.height)", systemImage: "checkmark") }
+                                else { Text("\(entry.label)  ·  \(entry.width)×\(entry.height)") }
+                            }
+                        }
+                    } label: { ChipLabel(icon: "aspectratio", text: currentAspect ?? "\(app.settings.width)×\(app.settings.height)") }
+                    Menu {
+                        ForEach(Quality.allCases) { q in
+                            Button { app.settings.preset(q) } label: {
+                                Label(q.rawValue + (q == .fast ? "  ·  8 steps" : q == .balanced ? "  ·  30 steps" : "  ·  50 steps"), systemImage: app.settings.quality == q ? "checkmark" : qualityIcon(q))
+                            }.disabled(q == .fast && !models.fastReady)
+                        }
+                    } label: { ChipLabel(icon: qualityIcon(app.settings.quality), text: app.settings.quality.rawValue) }
+                    Button { showAdvanced = true } label: { ChipLabel(icon: "slider.horizontal.3", text: "") }
+                        .accessibilityLabel("Advanced settings")
+                }
+                Spacer(minLength: 4)
+                Button {
+                    editing = false
+                    if app.running { app.cancel() } else { app.generate() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(app.running ? "Stop" : "Generate")
+                        Image(systemName: app.running ? "stop.fill" : "arrow.up")
+                    }
+                }
+                .buttonStyle(GlowButtonStyle(running: app.running))
+                .disabled(models.busy || (!app.running && app.settings.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                .accessibilityLabel(app.running ? "Stop generating" : "Generate image")
+            }
+        }
+        .padding(14).glassPanel(radius: 28)
+        .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { editing = false } } }
+    }
+    private var currentAspect: String? { AspectPreset.all.first { $0.width == app.settings.width && $0.height == app.settings.height }?.label }
+    private func qualityIcon(_ q: Quality) -> String { q == .fast ? "bolt.fill" : q == .balanced ? "circle.lefthalf.filled" : "sparkles" }
+
     private var statusLine: String {
         if app.paused { return "Paused. Keep Moss open to continue." }
         let p = app.progress
         let prefix = app.settings.count > 1 ? "Image \(app.imageNumber) of \(app.settings.count) · " : ""
+        let suffix = app.backgroundCPU ? " · slower in background" : ""
         switch p.stage {
-        case .encode: return prefix + "Reading your prompt"
-        case .prepare: return prefix + "Preparing the image model"
-        case .sample: return prefix + "Step \(min(p.index+1,p.total)) of \(p.total)"
-        case .decode: return prefix + "Finishing the image"
+        case .encode: return prefix + "Reading your prompt" + suffix
+        case .prepare: return prefix + "Preparing the image model" + suffix
+        case .sample: return prefix + "Step \(min(p.index+1,p.total)) of \(p.total)" + suffix
+        case .decode: return prefix + "Finishing the image" + suffix
         default: return prefix + "Starting"
         }
     }
@@ -90,69 +168,45 @@ struct GeneratorView: View {
         default: return 0
         }
     }
-    private var controls: some View {
-        MossCard {
-            VStack(alignment:.leading,spacing:16) {
-                Text("Size").font(.headline)
-                ScrollView(.horizontal,showsIndicators:false) {
-                    HStack(spacing:8) {
-                        ForEach(ratios,id:\.0) { entry in
-                            let (label,w,h) = entry
-                            Button { app.settings.width = w; app.settings.height = h; custom = false } label: {
-                                VStack(spacing:8) {
-                                    RoundedRectangle(cornerRadius:3).stroke(lineWidth:1.5).frame(width:28*min(1,CGFloat(w)/CGFloat(h)),height:28*min(1,CGFloat(h)/CGFloat(w))).frame(width:32,height:32)
-                                    Text(label).font(.caption)
-                                }.frame(width:52,height:64)
-                            }.buttonStyle(.bordered).tint(app.settings.width == w && app.settings.height == h ? mossAccent : .secondary)
-                                .accessibilityLabel("\(label), \(w) by \(h)")
-                        }
-                        Button("Custom") { custom.toggle() }.buttonStyle(.bordered)
-                    }
+}
+
+/// Negative prompt, size, steps, guidance, seed and batch: everything beyond the chips.
+struct AdvancedSheet: View {
+    @EnvironmentObject var app: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var editing: Bool
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Negative prompt") {
+                    TextField("Things to avoid (optional)", text: $app.settings.negativePrompt, axis: .vertical).lineLimit(2...5).focused($editing)
+                    if app.settings.guidance == 1 { Text("Fast uses guidance 1, so the negative prompt has no effect.").font(.caption).foregroundStyle(.secondary) }
                 }
-                Text("\(app.settings.width) × \(app.settings.height)").font(.callout).foregroundStyle(.secondary)
-                if custom {
-                    HStack {
-                        dimension("Width",value:$app.settings.width)
-                        dimension("Height",value:$app.settings.height)
-                    }
-                    Text("Sizes round to the nearest multiple of 16. Up to 1 megapixel (1024 × 1024).").font(.caption).foregroundStyle(.secondary)
+                Section("Size") {
+                    Stepper("Width  \(app.settings.width)", value: $app.settings.width, in: 256...1360, step: 16)
+                    Stepper("Height  \(app.settings.height)", value: $app.settings.height, in: 256...1360, step: 16)
+                    if app.settings.width * app.settings.height > 1_048_576 { Text("Keep width × height at or below 1,048,576 pixels.").font(.caption).foregroundStyle(.orange) }
+                    else if app.settings.width * app.settings.height < 700_000 { Text("Below about 1 megapixel the model loses detail.").font(.caption).foregroundStyle(.secondary) }
                 }
-                if app.settings.width*app.settings.height < 700_000 {
-                    Label("Small image: MOSS is tuned for about 1 megapixel, so detail drops at this size.",systemImage:"exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                Section("Sampling") {
+                    Stepper("Steps  \(app.settings.steps)", value: $app.settings.steps, in: 1...100)
+                    LabeledContent("Guidance") { TextField("Guidance", value: $app.settings.guidance, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).focused($editing) }
+                    LabeledContent("Shift") { TextField("Shift", value: $app.settings.shift, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).focused($editing) }
+                    Toggle("Skip layer 22 in negative branch", isOn: $app.settings.skipLayer)
                 }
-                Picker("Quality",selection:Binding(get:{app.settings.quality},set:{app.settings.preset($0)})) {
-                    ForEach(Quality.allCases) { q in Text(q.rawValue).tag(q) }
-                }.pickerStyle(.segmented)
-                Text(app.settings.quality == .fast ? "Recommended. 8-step distilled adapter, one pass per step: the quickest way to a sharp 1-megapixel image." : app.settings.quality == .best ? "Official settings: 50 steps, guidance 3, shift 5, negative layer 22 skipped. About 12× the work of Fast." : "Base model, 30 steps with guidance 3. About 7× the work of Fast; follows the negative prompt.").font(.caption).foregroundStyle(.secondary)
-                DisclosureGroup("Negative prompt",isExpanded:$negative) {
-                    TextField("Things to avoid (optional)",text:$app.settings.negativePrompt,axis:.vertical).lineLimit(2...5).focused($editing).padding(.top,8)
-                    if app.settings.guidance == 1 { Text("Guidance is 1, so the negative branch is unused.").font(.caption).foregroundStyle(.secondary) }
+                Section("Seed and batch") {
+                    Toggle("Lock seed", isOn: $app.settings.lockedSeed)
+                    LabeledContent("Seed") { TextField("Seed", value: $app.settings.seed, format: .number.grouping(.never)).keyboardType(.numberPad).multilineTextAlignment(.trailing).focused($editing) }
+                    Stepper("Images per run  \(app.settings.count)", value: $app.settings.count, in: 1...8)
                 }
-                DisclosureGroup("Advanced",isExpanded:$advanced) { advancedControls.padding(.top,12) }
+                Section { Button("Reset to \(app.settings.quality.rawValue) defaults") { app.settings.preset(app.settings.quality) } }
             }
+            .scrollContentBackground(.hidden)
+            .tint(Theme.accent)
+            .navigationTitle("Advanced").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { editing = false; dismiss() } } }
         }
-    }
-    private func dimension(_ label: String, value: Binding<Int>) -> some View {
-        VStack(alignment:.leading) {
-            Text(label).font(.caption)
-            TextField(label,value:value,format:.number).keyboardType(.numberPad).textFieldStyle(.roundedBorder).focused($editing)
-                .onChange(of:editing) { _,isEditing in if !isEditing { value.wrappedValue = max(256,min(1536,Int((Double(value.wrappedValue)/16).rounded())*16)) } }
-        }
-    }
-    private var advancedControls: some View {
-        VStack(alignment:.leading,spacing:16) {
-            Stepper("Steps: \(app.settings.steps)",value:$app.settings.steps,in:1...100)
-            HStack { Text("Guidance"); Spacer(); TextField("Guidance",value:$app.settings.guidance,format:.number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width:88).focused($editing) }
-            HStack { Text("Shift"); Spacer(); TextField("Shift",value:$app.settings.shift,format:.number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width:88).focused($editing) }
-            Toggle("Skip layer 22 in negative branch",isOn:$app.settings.skipLayer)
-            Toggle("Lock seed",isOn:$app.settings.lockedSeed)
-            HStack {
-                TextField("Seed",value:$app.settings.seed,format:.number).keyboardType(.numberPad).focused($editing)
-                Button { UIPasteboard.general.string = String(app.settings.seed) } label: { Image(systemName:"doc.on.doc") }.accessibilityLabel("Copy seed")
-            }
-            Stepper("Images per run: \(app.settings.count)",value:$app.settings.count,in:1...8)
-            Text("Images run one at a time. A locked seed increases by one for each image. Changing advanced values overrides the preset settings.").font(.caption).foregroundStyle(.secondary)
-        }
+        .preferredColorScheme(.dark)
     }
 }
 

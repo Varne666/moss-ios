@@ -152,6 +152,7 @@ import Combine
     /// Moss left the screen (or is about to). With iOS's continued-processing task the run keeps going on the
     /// CPU; without it, it stops at the next layer boundary and waits.
     func leftScreen() {
+        control?.onScreen = false
         guard running, !backgroundCPU, !paused else { return }
         let now = Date().timeIntervalSinceReferenceDate
         if continuation.granted {
@@ -165,6 +166,7 @@ import Combine
         }
     }
     func returnedToScreen() {
+        control?.onScreen = true
         guard running else { return }
         let now = Date().timeIntervalSinceReferenceDate
         if backgroundCPU {
@@ -193,7 +195,7 @@ import Combine
         if let error { self.error = error.localizedDescription }
     }
     func cancel() { control?.cancel(); progress = .init(message:"Stopping after the current operation") }
-    func memoryWarning() { if running { control?.cancel(.memory) } }
+    func memoryWarning() { if running { control?.trimMemory() } }
     func reuse(_ item: GalleryItem) {
         guard !running else { error = "Wait for this image to finish before reusing settings."; return }
         settings = item.settings; settings.lockedSeed = true; settings.count = 1
