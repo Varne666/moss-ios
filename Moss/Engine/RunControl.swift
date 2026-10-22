@@ -30,10 +30,11 @@ final class RunControl: @unchecked Sendable {
     /// On iPhone it is what iOS says this app can still use, minus room for activations and the system.
     func layerCacheBudget(pixels: Int) -> Int64 {
         if let override = ProcessInfo.processInfo.environment["MOSS_LAYER_CACHE_MB"], let mb = Int64(override) { return mb << 20 }
+        // Measured on the macOS harness (Fast, 1024², 2.6 GB cached): no faster per step, because the system
+        // file cache already keeps recently read weights in RAM, while peak memory rose from 2.7 to 4.9 GiB.
+        // On iPhone that extra memory only adds jetsam risk, so streaming stays the default.
         #if os(iOS)
-        let available = Int64(os_proc_available_memory())
-        let activations = Int64(1_200_000_000) + Int64(pixels) * 1_400   // ≈ 2.7 GB at 1 MP, measured on macOS
-        return max(0, available - activations - 900_000_000)
+        return 0
         #else
         return 0
         #endif

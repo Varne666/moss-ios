@@ -24,6 +24,8 @@
 | `Validation/mac-fast-1024.png` | 1024×1024, Fast (8-step DMD adapter, CFG 1, shift 5), seed 7 | Correct, detailed image | 589 s (~61 s/step) | 2.70 GiB (sampled); 2.90 GB (`time -l`) |
 | `Validation/mac-balanced-832x1248.png` | 832×1248, Balanced (30 steps, CFG 3, shift 5, layer 22 skipped in negative), seed 11 | Correct, detailed image | 2,780 s (~89 s/step) | 2.66 GiB (sampled); 2.86 GB (`time -l`) |
 
+Layer-cache experiment (Fast 1024², 2.6 GB of transformer blocks kept in memory): image unchanged, steps no faster (~65 s vs ~61 s), peak footprint 4.85 GiB vs 2.70 GiB, so the cache is off by default.
+
 Logs are in `Validation/*.log`. On this VM the time is dominated by system time (storage reads), not GPU compute.
 
 **Checkpoint layout** (`Validation/checkpoint-headers.txt`, read from the downloaded files)
