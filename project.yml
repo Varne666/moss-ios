@@ -46,6 +46,7 @@ targets:
         NSSupportsLiveActivities: true
         BGTaskSchedulerPermittedIdentifiers:
           - $(PRODUCT_BUNDLE_IDENTIFIER).generate.*
+          - $(PRODUCT_BUNDLE_IDENTIFIER).download.*
     entitlements:
       path: Moss/Moss.entitlements
       properties:

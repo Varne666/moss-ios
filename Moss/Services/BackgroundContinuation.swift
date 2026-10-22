@@ -1,14 +1,17 @@
 import BackgroundTasks
 import Foundation
 
-/// iOS 26 continued-processing task: lets a generation the user started keep running after they leave Moss.
+/// iOS 26 continued-processing task: lets work the user started (a generation or the model download) keep
+/// running after they leave Moss or lock the screen. iOS shows its own progress for it and can stop it.
 /// iPhone does not allow GPU work in the background (Apple only offers background GPU on M3+ iPads), so
 /// while Moss is in the background the engine runs on the CPU, which is much slower, and returns to the
 /// GPU as soon as Moss is on screen. If iOS refuses the task, generation pauses in the background instead.
 @MainActor final class BackgroundContinuation {
     private var task: BGContinuedProcessingTask?
     private var identifier: String?
-    private var title = "Creating your image"
+    private let kind: String
+    private let title: String
+    init(kind: String = "generate", title: String = "Creating your image") { self.kind = kind; self.title = title }
     /// Called when iOS ends the background allowance (the user stopped it, or the system needed resources).
     var expired: (() -> Void)?
     /// True once iOS has granted the task, so leaving Moss can continue on the CPU.
@@ -17,7 +20,7 @@ import Foundation
     func begin(subtitle: String) {
         end(success: false)
         guard let bundle = Bundle.main.bundleIdentifier else { return }
-        let id = "\(bundle).generate.\(UUID().uuidString)"
+        let id = "\(bundle).\(kind).\(UUID().uuidString)"
         let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main) { [weak self] launched in
             guard let continued = launched as? BGContinuedProcessingTask else { launched.setTaskCompleted(success: false); return }
             MainActor.assumeIsolated {

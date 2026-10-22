@@ -38,6 +38,15 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     private var lastUIBytes: Int64 = 0
     private var resumeWhenActive = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    /// Keeps the download running with the screen off or another app open (iOS 26 continued processing).
+    private lazy var continuation = MainActor.assumeIsolated { BackgroundContinuation(kind: "download", title: "Downloading the Moss model") }
+    private func withContinuation(_ body: @MainActor (BackgroundContinuation) -> Void) {
+        if Thread.isMainThread { MainActor.assumeIsolated { body(continuation) } }
+        else { DispatchQueue.main.async { MainActor.assumeIsolated { body(self.continuation) } } }
+    }
+    private var continuationGranted: Bool { Thread.isMainThread ? MainActor.assumeIsolated { continuation.granted } : false }
+    private var wantedBytes: Int64 { manifest?.files.filter { !$0.optional || wantedFast }.reduce(0) { $0 + $1.bytes } ?? 1 }
+    private var doneBytes: Int64 { manifest?.files.filter { completed.contains($0.path) }.reduce(0) { $0 + $1.bytes } ?? 0 }
     private var queue: [ModelFile] = []
     private var allowCellular = false
     private var paused = false
@@ -159,6 +168,8 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
         guard freeBytes > needed + 1_500_000_000 else { error = "Free at least \(AppPaths.bytes(needed+1_500_000_000)) before downloading. Moss needs room for checking the files too."; return }
         busy = true; downloading = true; retries = 0; resumeWhenActive = false
         UIApplication.shared.isIdleTimerDisabled = true
+        let total = AppPaths.bytes(needed)
+        withContinuation { $0.begin(subtitle: "\(total) left") }
         next()
     }
     private func partURL(_ file: ModelFile) -> URL { folder.appendingPathComponent(file.path + ".part") }
@@ -169,7 +180,9 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
         guard !paused else { return }
         guard let file = queue.first else {
             downloading = false; busy = false; active = nil; currentFile = nil; currentPath = nil; speed = 0
-            UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime(); verify(); return
+            UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
+            withContinuation { $0.end(success: true) }
+            verify(); return
         }
         message = "Downloading \(file.path)"; started = Date()
         // A complete file already in place (from an earlier install or an interrupted check) is verified,
@@ -201,6 +214,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     func pause() {
         guard let task = active else { return }
         paused = true; task.cancel(); currentPath = nil; speed = 0
+        withContinuation { $0.end(success: false) }
         active = nil; downloading = false; busy = false; message = "Download paused. Tap Download to resume."
         UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
     }
@@ -248,6 +262,9 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             let instant = Double(max(0,delta))/max(0.05,interval)
             self.speed = self.speed == 0 ? instant : self.speed * 0.9 + instant * 0.1
             self.remainingSeconds = self.speed > 0 ? Double(file.bytes-got)/self.speed : nil
+            let total = self.wantedBytes, have = self.doneBytes + got
+            let left = self.speed > 0 ? " · \(durationText(Double(total - have) / self.speed)) left" : ""
+            self.withContinuation { $0.update(fraction: Double(have) / Double(max(1, total)), subtitle: "\(AppPaths.bytes(total - have)) to go\(left)") }
         }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -260,7 +277,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             if self.paused { return }
             if let error {
                 let inBackground = UIApplication.shared.applicationState != .active
-                if inBackground {
+                if inBackground && !self.continuationGranted {
                     self.resumeWhenActive = true; self.downloading = false; self.busy = false; self.endBackgroundTime()
                     self.message = "Download paused while Moss was closed. It continues when you open Moss."
                 } else if self.retries < 6 {
@@ -315,6 +332,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
         currentPath = nil; speed = 0
         self.error = error.localizedDescription; busy = false; downloading = false; active?.cancel(); active = nil; currentFile = nil
         message = "Download needs attention"; UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
+        withContinuation { $0.end(success: false) }
     }
     func chooseFolder(_ url: URL) {
         guard !busy else { return }
