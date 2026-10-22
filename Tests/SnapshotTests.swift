@@ -23,7 +23,7 @@ import SwiftUI
         for dark in [false, true] {
             try render("card-running", GenerationProgressCard(paused: false, runStart: now.addingTimeInterval(-140), estimatedEnd: now.addingTimeInterval(262), status: "Step 3 of 8", stageFraction: 0.3), width: 370, dark: dark)
             try render("card-estimating", GenerationProgressCard(paused: false, runStart: now, estimatedEnd: nil, status: "Reading your prompt", stageFraction: 0.04), width: 370, dark: dark)
-            try render("card-paused", GenerationProgressCard(paused: true, runStart: now, estimatedEnd: now.addingTimeInterval(200), status: "Open Moss to keep going. iPhone pauses the GPU in the background.", stageFraction: 0.5), width: 370, dark: dark)
+            try render("card-paused", GenerationProgressCard(paused: true, runStart: now, estimatedEnd: now.addingTimeInterval(200), status: "Paused. Keep Moss open to continue.", stageFraction: 0.5), width: 370, dark: dark)
             try render("lockscreen-running", LockScreenView(state: running, size: "1024 × 1024").background(Color.black.opacity(0.55)), width: 370, dark: dark)
             try render("lockscreen-paused", LockScreenView(state: paused, size: "1024 × 1024").background(Color.black.opacity(0.55)), width: 370, dark: dark)
         }

@@ -32,7 +32,7 @@ The existing export avoids a new conversion job. The optional notebook mirrors t
 
 ## Quality and speed limits
 
-Best uses 50 steps, guidance 3, shift 5, and negative-only layer-22 skip. Balanced uses 20 steps with the same guidance and shift. Fast uses the separate 8-step DMD adapter, guidance 1 and shift 5. Editing advanced settings overrides these values. Negative prompts are unused when guidance equals 1.
+Sizes default to about one megapixel (1024×1024, 4:5, 3:4, 2:3, 9:16 and landscape equivalents), the model's recommended range; smaller sizes are allowed but lose detail. Fast is the default. Best uses 50 steps, guidance 3, shift 5, and negative-only layer-22 skip. Balanced uses 30 steps with the same guidance and shift. Fast uses the separate 8-step DMD adapter, guidance 1 and shift 5. Editing advanced settings overrides these values. Negative prompts are unused when guidance equals 1.
 
 8-bit image weights and 6-bit text weights are approximations. No measured percentage of image-quality loss is available from this project. The distilled adapter with these quantized weights is experimental. Numerical and image parity with the full-precision PyTorch pipeline are not established.
 
@@ -48,7 +48,7 @@ The app requests increased-memory-limit and extended-virtual-addressing entitlem
 
 ## Reliability boundaries
 
-- The app stops new work when interrupted or sent away from the screen. It does not promise background GPU generation or mid-image resume.
+- Leaving Moss keeps the image going on the CPU when iOS grants a continued-processing task (iOS 26), and pauses it otherwise; it switches back to the GPU when Moss returns. iPhone has no background GPU access. A Live Activity shows progress and a countdown in the Dynamic Island and on the Lock Screen.
 - Background URLSession handles downloads while iOS allows it. Force-quitting the app can stop background transfers until the app is reopened. Pause/resume is per file; integrity verification must finish before generation.
 - Bookmarks persist access, but iOS or the Files provider can revoke it. External folders must remain locally available for offline use.
 - Import copies files. Moving also copies and verifies before deleting the originals; this needs temporary free space. Existing destination files cause a safe failure.

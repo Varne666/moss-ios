@@ -1,0 +1,91 @@
+settings: 832x1248 quality=Balanced steps=30 guidance=3.0 shift=5.0 skip22=true seed=11
+prompt: Portrait of an elderly fisherman mending a net on a wooden dock at dawn, soft fog, film photograph
+[    0.1s +   0.1s] Reading your prompt footprint=0.00 GiB
+[    5.0s +   5.0s] Reading your prompt footprint=0.27 GiB
+[    5.4s +   0.4s] Reading your prompt footprint=0.27 GiB
+[    5.8s +   0.4s] Reading your prompt footprint=0.27 GiB
+[    6.9s +   1.1s] Reading your prompt footprint=0.41 GiB
+[    7.3s +   0.4s] Reading your prompt footprint=0.28 GiB
+[    7.7s +   0.4s] Reading your prompt footprint=0.28 GiB
+[    8.0s +   0.4s] Reading your prompt footprint=0.28 GiB
+[    8.3s +   0.3s] Reading your prompt footprint=0.40 GiB
+[    8.7s +   0.4s] Reading your prompt footprint=0.28 GiB
+[    9.0s +   0.3s] Reading your prompt footprint=0.28 GiB
+[    9.4s +   0.3s] Reading your prompt footprint=0.28 GiB
+[    9.6s +   0.3s] Reading your prompt footprint=0.41 GiB
+[   10.0s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   10.3s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   10.6s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   10.8s +   0.2s] Reading your prompt footprint=0.39 GiB
+[   11.1s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   11.3s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   11.6s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   11.8s +   0.2s] Reading your prompt footprint=0.41 GiB
+[   12.1s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   12.4s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   12.7s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   12.9s +   0.2s] Reading your prompt footprint=0.41 GiB
+[   13.2s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   13.5s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   13.7s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   14.0s +   0.2s] Reading your prompt footprint=0.40 GiB
+[   14.2s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   14.5s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   14.8s +   0.3s] Reading your prompt footprint=0.28 GiB
+[   15.1s +   0.3s] Reading your prompt footprint=0.41 GiB
+[   16.3s +   1.3s] Preparing the image model footprint=0.86 GiB
+[   18.9s +   2.5s] Step 1 of 30 footprint=0.90 GiB
+[  112.0s +  93.1s] Step 2 of 30 footprint=0.99 GiB
+[  208.4s +  96.4s] Step 3 of 30 footprint=0.99 GiB
+[  302.5s +  94.2s] Step 4 of 30 footprint=1.00 GiB
+[  396.5s +  94.0s] Step 5 of 30 footprint=1.00 GiB
+[  491.6s +  95.1s] Step 6 of 30 footprint=1.00 GiB
+[  589.2s +  97.6s] Step 7 of 30 footprint=1.00 GiB
+[  686.5s +  97.4s] Step 8 of 30 footprint=1.00 GiB
+[  782.0s +  95.5s] Step 9 of 30 footprint=1.00 GiB
+[  875.6s +  93.6s] Step 10 of 30 footprint=1.00 GiB
+[  968.1s +  92.5s] Step 11 of 30 footprint=1.00 GiB
+[ 1059.0s +  90.9s] Step 12 of 30 footprint=1.00 GiB
+[ 1148.1s +  89.1s] Step 13 of 30 footprint=1.00 GiB
+[ 1236.9s +  88.7s] Step 14 of 30 footprint=1.00 GiB
+[ 1328.4s +  91.5s] Step 15 of 30 footprint=1.00 GiB
+[ 1419.6s +  91.2s] Step 16 of 30 footprint=1.00 GiB
+[ 1509.0s +  89.4s] Step 17 of 30 footprint=1.00 GiB
+[ 1597.7s +  88.7s] Step 18 of 30 footprint=1.00 GiB
+[ 1685.8s +  88.1s] Step 19 of 30 footprint=1.00 GiB
+[ 1773.5s +  87.7s] Step 20 of 30 footprint=1.00 GiB
+[ 1866.3s +  92.8s] Step 21 of 30 footprint=1.00 GiB
+[ 1956.6s +  90.3s] Step 22 of 30 footprint=1.00 GiB
+[ 2043.3s +  86.7s] Step 23 of 30 footprint=1.00 GiB
+[ 2130.2s +  86.9s] Step 24 of 30 footprint=1.00 GiB
+[ 2218.8s +  88.7s] Step 25 of 30 footprint=1.00 GiB
+[ 2310.6s +  91.7s] Step 26 of 30 footprint=1.00 GiB
+[ 2403.8s +  93.2s] Step 27 of 30 footprint=1.00 GiB
+[ 2493.7s +  90.0s] Step 28 of 30 footprint=1.00 GiB
+[ 2579.1s +  85.4s] Step 29 of 30 footprint=1.00 GiB
+[ 2664.4s +  85.2s] Step 30 of 30 footprint=1.00 GiB
+[ 2749.9s +  85.6s] Step 30 of 30 footprint=1.00 GiB
+[ 2752.0s +   2.0s] Finishing the image footprint=0.59 GiB
+[ 2758.0s +   6.1s] Finishing the image footprint=1.03 GiB
+[ 2762.4s +   4.4s] Finishing the image footprint=1.55 GiB
+[ 2769.2s +   6.8s] Finishing the image footprint=2.60 GiB
+[ 2778.9s +   9.7s] Finishing the image footprint=1.17 GiB
+DONE total=2780.3s
+peak process footprint (50 ms sampling): 2.66 GiB
+MLX peak active memory: 1.97 GiB
+     2780.72 real        42.67 user       929.44 sys
+           599703552  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             9806637  page reclaims
+                 886  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+               22403  voluntary context switches
+              375249  involuntary context switches
+          2855947584  peak memory footprint

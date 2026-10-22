@@ -22,6 +22,7 @@
 |---|---|---|---|---|
 | `Validation/mac-best-512.png` | 512×512, Best (50 steps, CFG 3, shift 5, layer 22 skipped in negative), seed 42, "A red fox sitting in fresh snow, golden hour, photograph" | Correct, detailed image | 1,589 s (~29 s/step) | 1.62 GiB (sampled); 1.74 GB (`time -l`) |
 | `Validation/mac-fast-1024.png` | 1024×1024, Fast (8-step DMD adapter, CFG 1, shift 5), seed 7 | Correct, detailed image | 589 s (~61 s/step) | 2.70 GiB (sampled); 2.90 GB (`time -l`) |
+| `Validation/mac-balanced-832x1248.png` | 832×1248, Balanced (30 steps, CFG 3, shift 5, layer 22 skipped in negative), seed 11 | Correct, detailed image | 2,780 s (~89 s/step) | 2.66 GiB (sampled); 2.86 GB (`time -l`) |
 
 Logs are in `Validation/*.log`. On this VM the time is dominated by system time (storage reads), not GPU compute.
 
@@ -40,9 +41,14 @@ Logs are in `Validation/*.log`. On this VM the time is dominated by system time 
   - The tokenizer now keeps text between regex matches and rejects unknown pre-tokeniser formats.
   - Layout assertions were added.
   - Launch-time re-hashing of all 12 GB was replaced by one hash after download plus a size/date check.
-  - Generation is no longer cancelled by brief interruptions such as Control Center or notifications (only real backgrounding stops it).
+  - Leaving the app no longer cancels the image: it continues on the CPU (or pauses) and resumes on the GPU on return.
+
+**Since the first report**
+- Defaults changed to ~1-megapixel sizes (the model's recommended 1–2 MP range) and the Fast preset, after the runs above showed Fast at 1024² finishing in less time than Best at 512² with much more detail.
+- Countdown (`GenerationClock`), Live Activity extension (`MossActivity`) and background continuation (`BackgroundContinuation`) are covered by unit and render tests on the simulator (8 tests pass). Dynamic Island, Lock Screen and background behaviour need a real iPhone and are untested.
 
 ## Not done
+- **Background generation on iPhone is untested.** It relies on iOS 26 continued-processing tasks and moves work to the CPU, because Apple does not allow background GPU use on any iPhone. Whether iOS grants the task to a re-signed app, how fast the CPU is and whether iOS keeps a 2–3 GB background process alive can only be checked on the phone.
 - **No run on a physical iPhone.** iPhone speed, iOS memory limits (jetsam), thermal behaviour, downloads, Files folders, Photos export, VoiceOver and Dynamic Type are untested. iOS counts memory differently from macOS, so the footprints above are indications only.
 - **No pixel-level parity check against the official PyTorch pipeline.** Images are judged visually. The sampler schedule and noise were checked numerically against torch.
 - **Signulous signing has not been tried.** Neither has whether its profile carries the increased-memory or extended-addressing entitlements; the app does not rely on them.
