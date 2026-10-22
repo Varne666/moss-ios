@@ -2,8 +2,9 @@ import Foundation
 import CryptoKit
 import Network
 import Combine
+import UIKit
 
-final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate {
+final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     @Published var manifest: ModelManifest?
     @Published var ready = false
     @Published var fastReady = false
@@ -17,10 +18,17 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
     @Published var cellular = false
     @Published var folder = AppPaths.models
     @Published var freeBytes: Int64 = 0
-    var backgroundCompletion: (() -> Void)? { didSet { finishBackgroundIfPossible() } }
-    private var backgroundEventsFinished = false
+    /// Earlier builds used a background URLSession; iOS may still deliver its events once. Nothing to finish.
+    var backgroundCompletion: (() -> Void)? { didSet { backgroundCompletion?(); backgroundCompletion = nil } }
     private var completed = Set<String>()
-    private var active: URLSessionDownloadTask?
+    private var active: URLSessionDataTask?
+    private var handle: FileHandle?
+    private var currentFile: ModelFile?
+    private var received: Int64 = 0
+    private var retries = 0
+    private var lastUIUpdate = Date.distantPast
+    private var resumeWhenActive = false
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var queue: [ModelFile] = []
     private var wantedFast = false
     private var allowCellular = false
@@ -31,13 +39,18 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
     private var pendingVerification = 0
     private let io = DispatchQueue(label:"Moss.modelIO",qos:.utility)
     private let monitor = NWPathMonitor()
+    /// Moss writes downloads straight into its own model folder as `<file>.part` and resumes them with HTTP
+    /// Range requests. (iOS's background download service could not create its temporary files for re-signed
+    /// installs, which stopped downloads with "Cannot create file".)
     private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.background(withIdentifier:"org.mossios.models.v1")
-        config.sessionSendsLaunchEvents = true
-        config.isDiscretionary = false
+        let config = URLSessionConfiguration.default
         config.waitsForConnectivity = true
-        config.allowsCellularAccess = true
-        return URLSession(configuration:config,delegate:self,delegateQueue:.main)
+        config.timeoutIntervalForRequest = 90
+        config.timeoutIntervalForResource = 7 * 24 * 3600
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+        let queue = OperationQueue(); queue.maxConcurrentOperationCount = 1; queue.name = "Moss.download"
+        return URLSession(configuration:config,delegate:self,delegateQueue:queue)
     }()
     override init() {
         super.init()
@@ -57,13 +70,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
         } catch { self.error = error.localizedDescription; message = "Model setup needs attention" }
         monitor.pathUpdateHandler = { [weak self] path in DispatchQueue.main.async { self?.cellular = path.isExpensive } }
         monitor.start(queue:DispatchQueue(label:"Moss.network"))
-        _ = session
-        session.getAllTasks { tasks in DispatchQueue.main.async {
-            if let task = tasks.compactMap({$0 as? URLSessionDownloadTask}).first {
-                self.completed = Set(UserDefaults.standard.stringArray(forKey:"verifiedPaths") ?? []); self.wantedFast = UserDefaults.standard.bool(forKey:"downloadFast"); self.active = task; self.downloading = true; self.busy = true; self.message = "Resuming model download"
-                self.started = Date(); self.initialBytes = task.countOfBytesReceived; task.resume()
-            } else { self.verify() }
-        } }
+        verify()
     }
     deinit { securityURL?.stopAccessingSecurityScopedResource(); monitor.cancel() }
     var totalBytes: Int64 { manifest?.requiredBytes ?? 0 }
@@ -133,78 +140,142 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
         guard !busy, let manifest else { return }
         self.allowCellular = allowCellular; wantedFast = includeFast; UserDefaults.standard.set(includeFast,forKey:"downloadFast"); paused = false; refreshSpace()
         queue = manifest.files.filter { (!($0.optional) || includeFast) && !completed.contains($0.path) }
-        let needed = queue.reduce(Int64(0)) { $0+$1.bytes }
-        guard freeBytes > needed + 1_500_000_000 else { error = "Free at least \(AppPaths.bytes(needed+1_500_000_000)) before downloading. Moss needs room for temporary files too."; return }
-        busy = true; downloading = true; next()
+        let needed = queue.reduce(Int64(0)) { total, file in total + max(0, file.bytes - partialBytes(file)) }
+        guard freeBytes > needed + 1_500_000_000 else { error = "Free at least \(AppPaths.bytes(needed+1_500_000_000)) before downloading. Moss needs room for checking the files too."; return }
+        busy = true; downloading = true; retries = 0; resumeWhenActive = false
+        UIApplication.shared.isIdleTimerDisabled = true
+        next()
+    }
+    private func partURL(_ file: ModelFile) -> URL { folder.appendingPathComponent(file.path + ".part") }
+    private func partialBytes(_ file: ModelFile) -> Int64 {
+        Int64((try? partURL(file).resourceValues(forKeys:[.fileSizeKey]).fileSize) ?? 0)
     }
     private func next() {
         guard !paused else { return }
-        if queue.isEmpty {
-            downloading = false; busy = false; active = nil; verify(); return
+        guard let file = queue.first else {
+            downloading = false; busy = false; active = nil; currentFile = nil
+            UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime(); verify(); return
         }
-        let file = queue.removeFirst()
-        message = "Downloading \(file.path)"; fraction = 0; started = Date(); initialBytes = 0
-        let resume = resumeURL(file.path)
-        let task: URLSessionDownloadTask
-        if let data = try? Data(contentsOf:resume) { task = session.downloadTask(withResumeData:data); try? FileManager.default.removeItem(at:resume) }
-        else { var request = URLRequest(url:file.url); request.allowsCellularAccess = allowCellular; task = session.downloadTask(with:request) }
-        task.taskDescription = file.path; active = task; task.resume()
-    }
-    private func resumeURL(_ path: String) -> URL {
-        AppPaths.support.appendingPathComponent("resume-"+path.replacingOccurrences(of:"/",with:"_")+".data")
+        message = "Downloading \(file.path)"; started = Date()
+        do {
+            let part = partURL(file)
+            try FileManager.default.createDirectory(at:part.deletingLastPathComponent(),withIntermediateDirectories:true)
+            if !FileManager.default.fileExists(atPath:part.path) { FileManager.default.createFile(atPath:part.path,contents:nil) }
+            var have = partialBytes(file)
+            let writer = try FileHandle(forWritingTo:part)
+            if have > file.bytes { try writer.truncate(atOffset:0); have = 0 }
+            try writer.seekToEnd()
+            received = have; initialBytes = have
+            fraction = Double(have)/Double(max(1,file.bytes))
+            if have == file.bytes { try writer.close(); finished(file); return }
+            handle = writer; currentFile = file
+            var request = URLRequest(url:file.url)
+            request.allowsCellularAccess = allowCellular
+            if have > 0 { request.setValue("bytes=\(have)-",forHTTPHeaderField:"Range") }
+            let task = session.dataTask(with:request); task.taskDescription = file.path
+            active = task; beginBackgroundTime(); task.resume()
+        } catch { fail(MossError.model("Moss could not write \(file.path): \(error.localizedDescription)")) }
     }
     func pause() {
         guard let task = active else { return }
-        paused = true
-        task.cancel(byProducingResumeData: { data in
-            if let data, let path = task.taskDescription { try? data.write(to:self.resumeURL(path),options:.atomic) }
-            DispatchQueue.main.async { self.active = nil; self.downloading = false; self.busy = false; self.message = "Download paused. Tap Download to resume." }
-        })
+        paused = true; task.cancel()
+        active = nil; downloading = false; busy = false; message = "Download paused. Tap Download to resume."
+        UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
     }
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        fraction = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten)/Double(totalBytesExpectedToWrite) : 0
-        bytesPerSecond = Double(max(0,totalBytesWritten-initialBytes))/max(1,Date().timeIntervalSince(started))
-        remainingSeconds = bytesPerSecond > 0 && totalBytesExpectedToWrite > 0 ? Double(totalBytesExpectedToWrite-totalBytesWritten)/bytesPerSecond : nil
+    /// Called when Moss returns to the screen: a download that iOS interrupted in the background continues.
+    func resumeIfInterrupted() {
+        guard resumeWhenActive, !busy else { return }
+        resumeWhenActive = false; error = nil
+        download(includeFast:wantedFast,allowCellular:allowCellular)
     }
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didResumeAtOffset fileOffset: Int64, expectedTotalBytes: Int64) { initialBytes = fileOffset; started = Date() }
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard let path = downloadTask.taskDescription, let file = manifest?.files.first(where:{$0.path == path}) else { return }
-        let staged = AppPaths.support.appendingPathComponent(UUID().uuidString+".download")
-        do {
-            if let response = downloadTask.response as? HTTPURLResponse, !(200...299).contains(response.statusCode) { throw MossError.model("The download server returned \(response.statusCode). Try again later.") }
-            try FileManager.default.moveItem(at:location,to:staged)
-            pendingVerification += 1; message = "Checking \(file.path)"; active = nil
-            let destinationFolder = folder
-            io.async {
-                do {
-                    let size = try staged.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0
-                    guard Int64(size) == file.bytes, try Self.digest(staged) == file.sha256 else { throw MossError.model("A downloaded file did not pass its integrity check. Tap Download to retry.") }
-                    let destination = destinationFolder.appendingPathComponent(path)
-                    try FileManager.default.createDirectory(at:destination.deletingLastPathComponent(),withIntermediateDirectories:true)
-                    if FileManager.default.fileExists(atPath:destination.path) { _ = try FileManager.default.replaceItemAt(destination,withItemAt:staged) }
-                    else { try FileManager.default.moveItem(at:staged,to:destination) }
-                    Self.remember(path,folder:destinationFolder)
-                    DispatchQueue.main.async {
-                        self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths"); self.pendingVerification -= 1
-                        self.refreshSpace(); self.finishBackgroundIfPossible()
-                        if self.queue.isEmpty && self.downloading { self.queue = self.manifest?.files.filter { (!$0.optional || self.wantedFast) && !self.completed.contains($0.path) } ?? [] }
-                        self.next()
-                    }
-                } catch {
-                    try? FileManager.default.removeItem(at:staged)
-                    DispatchQueue.main.async { self.pendingVerification -= 1; self.fail(error); self.finishBackgroundIfPossible() }
-                }
-            }
-        } catch { try? FileManager.default.removeItem(at:staged); fail(error) }
+    private func beginBackgroundTime() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName:"Moss model download") { [weak self] in self?.endBackgroundTime() }
+    }
+    private func endBackgroundTime() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid
+    }
+
+    // MARK: URLSession (runs on the serial download queue)
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let http = response as? HTTPURLResponse else { completionHandler(.cancel); return }
+        if http.statusCode == 200, received > 0 {
+            // The server ignored the Range request and is sending the whole file: start the part file over.
+            do { try handle?.truncate(atOffset:0); received = 0 } catch { completionHandler(.cancel); return }
+        } else if !(http.statusCode == 200 || http.statusCode == 206) {
+            DispatchQueue.main.async { self.fail(MossError.model("The download server returned \(http.statusCode). Tap Download to try again.")) }
+            completionHandler(.cancel); return
+        }
+        completionHandler(.allow)
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let handle else { return }
+        do { try handle.write(contentsOf:data); received += Int64(data.count) }
+        catch { dataTask.cancel(); DispatchQueue.main.async { self.fail(MossError.model("Moss could not save the download: \(error.localizedDescription)")) }; return }
+        let now = Date()
+        guard now.timeIntervalSince(lastUIUpdate) > 0.3, let file = currentFile else { return }
+        lastUIUpdate = now
+        let got = received, base = initialBytes, since = started
+        DispatchQueue.main.async {
+            self.fraction = Double(got)/Double(max(1,file.bytes))
+            self.bytesPerSecond = Double(max(0,got-base))/max(1,now.timeIntervalSince(since))
+            self.remainingSeconds = self.bytesPerSecond > 0 ? Double(file.bytes-got)/self.bytesPerSecond : nil
+        }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error, !paused else { return }
-        if let data = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data, let path = task.taskDescription { try? data.write(to:resumeURL(path),options:.atomic) }
-        fail(MossError.model("Download stopped: \(error.localizedDescription) Tap Download to resume."))
+        try? handle?.synchronize(); try? handle?.close(); handle = nil
+        let got = received
+        DispatchQueue.main.async {
+            guard self.active === task else { return }
+            self.active = nil
+            guard let file = self.currentFile else { return }
+            if self.paused { return }
+            if let error {
+                let inBackground = UIApplication.shared.applicationState != .active
+                if inBackground {
+                    self.resumeWhenActive = true; self.downloading = false; self.busy = false; self.endBackgroundTime()
+                    self.message = "Download paused while Moss was closed. It continues when you open Moss."
+                } else if self.retries < 6 {
+                    self.retries += 1; self.message = "Connection interrupted. Retrying…"
+                    DispatchQueue.main.asyncAfter(deadline:.now() + Double(self.retries * 3)) { if self.downloading && !self.paused { self.next() } }
+                } else {
+                    self.fail(MossError.model("Download stopped: \(error.localizedDescription) Tap Download to resume; finished parts are kept."))
+                }
+                return
+            }
+            if got == file.bytes { self.retries = 0; self.finished(file) }
+            else { self.retries += 1; if self.retries < 6 { self.next() } else { self.fail(MossError.model("The download ended early. Tap Download to resume.")) } }
+        }
     }
-    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) { backgroundEventsFinished = true; finishBackgroundIfPossible() }
-    private func finishBackgroundIfPossible() { if backgroundEventsFinished && pendingVerification == 0, let completion = backgroundCompletion { backgroundEventsFinished = false; backgroundCompletion = nil; completion() } }
-    private func fail(_ error: Error) { self.error = error.localizedDescription; busy = false; downloading = false; active = nil; message = "Download needs attention" }
+    private func finished(_ file: ModelFile) {
+        let part = partURL(file), destinationFolder = folder, path = file.path
+        pendingVerification += 1; message = "Checking \(file.path)"; currentFile = nil
+        io.async {
+            do {
+                let size = try part.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0
+                guard Int64(size) == file.bytes, try Self.digest(part) == file.sha256 else {
+                    try? FileManager.default.removeItem(at:part)
+                    throw MossError.model("\(path) did not pass its integrity check, so it was discarded. Tap Download to fetch it again.")
+                }
+                let destination = destinationFolder.appendingPathComponent(path)
+                if FileManager.default.fileExists(atPath:destination.path) { _ = try FileManager.default.replaceItemAt(destination,withItemAt:part) }
+                else { try FileManager.default.moveItem(at:part,to:destination) }
+                Self.remember(path,folder:destinationFolder)
+                DispatchQueue.main.async {
+                    self.pendingVerification -= 1
+                    self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths")
+                    self.queue.removeAll { $0.path == path }
+                    self.refreshSpace(); self.next()
+                }
+            } catch { DispatchQueue.main.async { self.pendingVerification -= 1; self.fail(error) } }
+        }
+    }
+    private func fail(_ error: Error) {
+        self.error = error.localizedDescription; busy = false; downloading = false; active?.cancel(); active = nil; currentFile = nil
+        message = "Download needs attention"; UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
+    }
     func chooseFolder(_ url: URL) {
         guard !busy else { return }
         let accessed = url.startAccessingSecurityScopedResource()
@@ -275,7 +346,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDownloadDelegate
             for file in manifest.files {
                 let path = folder.appendingPathComponent(file.path)
                 if FileManager.default.fileExists(atPath:path.path) { try FileManager.default.removeItem(at:path) }
-                try? FileManager.default.removeItem(at:resumeURL(file.path))
+                try? FileManager.default.removeItem(at:partURL(file))
             }
             completed = []; UserDefaults.standard.removeObject(forKey:"verifiedPaths"); refreshStatus(); refreshSpace()
         } catch { self.error = "Some files could not be deleted: \(error.localizedDescription)" }
