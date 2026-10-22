@@ -130,9 +130,9 @@ struct GeneratorView: View {
                     if app.running { app.cancel() } else { app.generate() }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(app.running ? "Stop" : "Generate")
+                        Text(app.running ? "Stop" : "Generate").lineLimit(1)
                         Image(systemName: app.running ? "stop.fill" : "arrow.up")
-                    }
+                    }.fixedSize()
                 }
                 .buttonStyle(GlowButtonStyle(running: app.running))
                 .disabled(models.busy || (!app.running && app.settings.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))

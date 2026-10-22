@@ -68,7 +68,11 @@ struct SetupView: View {
         let total = wantedBytes
         return total > 0 ? Double(wantedGroups.reduce(0) { $0 + have($1) }) / Double(total) : 0
     }
-    private func seconds(_ bytes: Int64) -> Double? { models.speed > 1000 ? Double(bytes) / models.speed : nil }
+    private func seconds(_ bytes: Int64) -> Double? {
+        guard models.speed > 1000 else { return nil }
+        let value = Double(bytes) / models.speed
+        return value >= 1 ? value : nil
+    }
 
     // MARK: Overall
 
