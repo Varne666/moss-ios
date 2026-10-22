@@ -40,7 +40,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     /// Keeps the download running with the screen off or another app open (iOS 26 continued processing).
     private lazy var continuation = MainActor.assumeIsolated { BackgroundContinuation(kind: "download", title: "Downloading the Moss model") }
-    private func withContinuation(_ body: @MainActor (BackgroundContinuation) -> Void) {
+    private func withContinuation(_ body: @escaping @MainActor (BackgroundContinuation) -> Void) {
         if Thread.isMainThread { MainActor.assumeIsolated { body(continuation) } }
         else { DispatchQueue.main.async { MainActor.assumeIsolated { body(self.continuation) } } }
     }
