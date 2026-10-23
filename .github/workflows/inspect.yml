@@ -13,6 +13,15 @@ jobs:
         run: |
           mkdir -p out
           python3 scripts/remote_headers.py $(cat ci/urls.txt) 2>&1 | tee out/headers.txt
+          for repo in lodestones/Kromoss OpenMOSS-Team/MOSS-Image-Base; do
+            echo "$repo $(curl -fsSL https://huggingface.co/api/models/$repo | python3 -c 'import json,sys;print(json.load(sys.stdin)["sha"])')" | tee -a out/pins.txt
+          done
+          K=$(grep lodestones/Kromoss out/pins.txt | cut -d' ' -f2)
+          for f in diffusion_models/kromoss_bf16.safetensors 8-steps-dmd2-lora.safetensors; do
+            echo "== $f" | tee -a out/pins.txt
+            curl -fsSI "https://huggingface.co/lodestones/Kromoss/resolve/$K/$f" | grep -iE "^(x-linked-etag|x-linked-size|x-repo-commit)" | tee -a out/pins.txt
+          done
+          curl -fsSL "https://huggingface.co/api/models/lodestones/Kromoss/tree/$K?recursive=true" | python3 -m json.tool | head -80 | tee -a out/pins.txt
       - name: Publish
         if: always()
         run: |

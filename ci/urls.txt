@@ -1,5 +1,1 @@
-https://huggingface.co/lodestones/Kromoss/resolve/main/diffusion_models/kromoss_bf16.safetensors
 https://huggingface.co/lodestones/Kromoss/resolve/main/8-steps-dmd2-lora.safetensors
-https://huggingface.co/lodestones/Kromoss/resolve/main/loras/8-steps-dmd2-lora.safetensors
-https://huggingface.co/lodestones/MOSS-Image-Base-8-steps-dmd/resolve/da05cb3b52899179e2bb5f7efe1058fefcbae21b/lora.safetensors
-https://civitai.com/api/download/models/3417962
