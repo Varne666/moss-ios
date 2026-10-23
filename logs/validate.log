@@ -1,0 +1,2 @@
+PASS: manifest, pinned file identities, 15 model files, icons, privacy manifest, source presence, and Python syntax.
+Apple compilation, Swift tests, signing, memory use, speed, and image quality require their separate checks.

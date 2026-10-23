@@ -1,0 +1,23 @@
+Command line invocation:
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild -resolvePackageDependencies -project Moss.xcodeproj -scheme Moss
+
+Resolve Package Graph
+
+Fetching from https://github.com/ml-explore/mlx-swift
+
+Fetching from https://github.com/apple/swift-numerics
+
+Creating working copy of package ‘swift-numerics’
+
+Checking out 1.1.1 of package ‘swift-numerics’
+
+Creating working copy of package ‘mlx-swift’
+
+Checking out 0.32.3 of package ‘mlx-swift’
+
+
+Resolved source packages:
+  mlx-swift: https://github.com/ml-explore/mlx-swift @ 0.32.3
+  swift-numerics: https://github.com/apple/swift-numerics @ 1.1.1
+
+resolved source packages: mlx-swift, swift-numerics

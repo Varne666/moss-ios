@@ -1,0 +1,39 @@
+INSTALL MOSS ON YOUR IPHONE
+
+1. Save Moss-unsigned.ipa to the Files app on your iPhone.
+2. In Signulous (app or signulous.com dashboard), upload Moss-unsigned.ipa,
+   sign it, then install it. Wait for the Moss leaf icon on your Home Screen.
+   If it fails, try Moss-unsigned-no-live-activity.ipa (same app without the
+   Dynamic Island add-on).
+3. Open Moss. On Wi-Fi, with at least 16 GB free, tap Download (13.3 GB with
+   the Fast add-on). Keep Moss open until "Model verified · ready offline".
+4. Type a prompt and tap Generate (Fast, 1024 x 1024 by default). Allow Live
+   Activities if asked. The first image times your iPhone; later countdowns
+   start immediately.
+5. You can leave Moss: if iOS allows background work it keeps going (slower,
+   on the CPU) and the Dynamic Island keeps counting down; otherwise it pauses
+   and continues when you come back.
+
+REALISM (Kromoss + Realistic Snapshot)
+- Settings -> Models: turn on "Include Kromoss realism model" and tap Download
+  selected (10.2 GB). Moss prepares it for the iPhone once and deletes the
+  original, keeping 5.6 GB.
+- Realistic Snapshot LoRA (Civitai needs an account): on civitai.com open
+  Account settings -> API Keys -> Add API key and copy it. In Moss tap the
+  Style chip, paste the key, tap Download Realistic Snapshot (580 MB, checked
+  against Civitai's checksum). The key stays in your iPhone's Keychain.
+  Or download the file in Safari and tap Import LoRA. Then tap
+  "Realistic Snapshot recipe".
+
+If something stalls, open Settings -> Diagnostics: it logs every step with the
+time, and can be copied or shared.
+If Moss closes while generating, reopen it (it explains what happened), close
+other apps, let the phone cool, and try again or pick a smaller size.
+Do not uninstall Moss to troubleshoot: that deletes its downloaded model and
+gallery.
+
+MEMORY ENTITLEMENTS
+The app asks for Apple's "increased memory limit" and "extended virtual
+addressing" permissions. An unsigned IPA cannot grant them to itself; only the
+signing profile Signulous uses can. Moss does not depend on them: on the macOS
+test harness a complete 1024 x 1024 Fast image peaked at 2.7 GiB of memory.
