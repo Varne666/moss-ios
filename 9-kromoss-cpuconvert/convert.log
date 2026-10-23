@@ -1,0 +1,74 @@
+log: 23:24:19.329 convert: Kromoss start (CPU)
+converted 6/43  8s  footprint=0.61 GiB
+converted 12/43  12s  footprint=0.61 GiB
+converted 18/43  17s  footprint=0.61 GiB
+converted 24/43  22s  footprint=0.61 GiB
+converted 30/43  26s  footprint=0.61 GiB
+converted 36/43  31s  footprint=0.61 GiB
+converted 42/43  36s  footprint=0.61 GiB
+converted 43/43  36s  footprint=0.61 GiB
+log: 23:24:55.817 convert: Kromoss done
+CONVERTED in 36s, peak footprint 1.44 GiB
+       36.58 real        18.04 user        12.06 sys
+          1323778048  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1098468  page reclaims
+                 483  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 297  voluntary context switches
+               13716  involuntary context switches
+          1549684992  peak memory footprint
+total 10729248
+drwxr-xr-x  46 runner  staff       1472 Oct 23 23:24 .
+drwxr-xr-x   8 runner  staff        256 Oct 23 23:22 ..
+-rw-r--r--   1 runner  staff  439068117 Oct 23 23:24 base.safetensors
+-rw-r--r--   1 runner  staff       1502 Oct 23 23:24 converted.json
+-rw-r--r--   1 runner  staff  120339066 Oct 23 23:24 layer-00.safetensors
+-rw-r--r--   1 runner  staff  120339074 Oct 23 23:24 layer-01.safetensors
+-rw-r--r--   1 runner  staff  120339068 Oct 23 23:24 layer-02.safetensors
+-rw-r--r--   1 runner  staff  120339080 Oct 23 23:24 layer-03.safetensors
+-rw-r--r--   1 runner  staff  120339064 Oct 23 23:24 layer-04.safetensors
+-rw-r--r--   1 runner  staff  120339046 Oct 23 23:24 layer-05.safetensors
+-rw-r--r--   1 runner  staff  120339050 Oct 23 23:24 layer-06.safetensors
+-rw-r--r--   1 runner  staff  120339060 Oct 23 23:24 layer-07.safetensors
+-rw-r--r--   1 runner  staff  120339066 Oct 23 23:24 layer-08.safetensors
+-rw-r--r--   1 runner  staff  120339094 Oct 23 23:24 layer-09.safetensors
+-rw-r--r--   1 runner  staff  120339084 Oct 23 23:24 layer-10.safetensors
+-rw-r--r--   1 runner  staff  120339078 Oct 23 23:24 layer-11.safetensors
+-rw-r--r--   1 runner  staff  120339084 Oct 23 23:24 layer-12.safetensors
+-rw-r--r--   1 runner  staff  120339092 Oct 23 23:24 layer-13.safetensors
+-rw-r--r--   1 runner  staff  120339076 Oct 23 23:24 layer-14.safetensors
+-rw-r--r--   1 runner  staff  120339090 Oct 23 23:24 layer-15.safetensors
+-rw-r--r--   1 runner  staff  120339084 Oct 23 23:24 layer-16.safetensors
+-rw-r--r--   1 runner  staff  120339080 Oct 23 23:24 layer-17.safetensors
+-rw-r--r--   1 runner  staff  120339066 Oct 23 23:24 layer-18.safetensors
+-rw-r--r--   1 runner  staff  120339096 Oct 23 23:24 layer-19.safetensors
+-rw-r--r--   1 runner  staff  120339064 Oct 23 23:24 layer-20.safetensors
+-rw-r--r--   1 runner  staff  120339070 Oct 23 23:24 layer-21.safetensors
+-rw-r--r--   1 runner  staff  120339102 Oct 23 23:24 layer-22.safetensors
+-rw-r--r--   1 runner  staff  120339078 Oct 23 23:24 layer-23.safetensors
+-rw-r--r--   1 runner  staff  120339090 Oct 23 23:24 layer-24.safetensors
+-rw-r--r--   1 runner  staff  120339080 Oct 23 23:24 layer-25.safetensors
+-rw-r--r--   1 runner  staff  120339068 Oct 23 23:24 layer-26.safetensors
+-rw-r--r--   1 runner  staff  120339058 Oct 23 23:24 layer-27.safetensors
+-rw-r--r--   1 runner  staff  120339084 Oct 23 23:24 layer-28.safetensors
+-rw-r--r--   1 runner  staff  120339074 Oct 23 23:24 layer-29.safetensors
+-rw-r--r--   1 runner  staff  120339078 Oct 23 23:24 layer-30.safetensors
+-rw-r--r--   1 runner  staff  120339088 Oct 23 23:24 layer-31.safetensors
+-rw-r--r--   1 runner  staff  120339078 Oct 23 23:24 layer-32.safetensors
+-rw-r--r--   1 runner  staff  120339078 Oct 23 23:24 layer-33.safetensors
+-rw-r--r--   1 runner  staff  120339084 Oct 23 23:24 layer-34.safetensors
+-rw-r--r--   1 runner  staff  120339092 Oct 23 23:24 layer-35.safetensors
+-rw-r--r--   1 runner  staff  120339088 Oct 23 23:24 layer-36.safetensors
+-rw-r--r--   1 runner  staff  120339078 Oct 23 23:24 layer-37.safetensors
+-rw-r--r--   1 runner  staff  120339074 Oct 23 23:24 layer-38.safetensors
+-rw-r--r--   1 runner  staff  120339098 Oct 23 23:24 layer-39.safetensors
+-rw-r--r--   1 runner  staff  120339070 Oct 23 23:24 layer-40.safetensors
+-rw-r--r--   1 runner  staff  120339090 Oct 23 23:24 layer-41.safetensors

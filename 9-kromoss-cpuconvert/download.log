@@ -1,0 +1,17 @@
+verified tokenizer/chat_template.jinja (7,756 bytes)
+verified tokenizer/tokenizer.json (19,989,325 bytes)
+verified tokenizer/tokenizer_config.json (1,123 bytes)
+verified transformer/config.json (352 bytes)
+verified transformer/model-00001-of-00002.safetensors (4,291,488,455 bytes)
+verified transformer/model-00002-of-00002.safetensors (1,201,822,635 bytes)
+verified transformer/model.safetensors.index.json (66,602 bytes)
+verified vae/config.json (935 bytes)
+verified vae/decoder.safetensors (111,805,440 bytes)
+verified text_encoder/config.json (2,474 bytes)
+verified text_encoder/model-00001-of-00002.safetensors (4,259,639,915 bytes)
+verified text_encoder/model-00002-of-00002.safetensors (2,190,818,161 bytes)
+verified text_encoder/model.safetensors.index.json (69,862 bytes)
+verified adapter/dmd2.safetensors (1,189,176,800 bytes)
+verified kromoss/kromoss_bf16.safetensors (10,164,655,808 bytes)
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk2s1s1   320Gi    12Gi    76Gi    14%    459k  799M    0%   /
