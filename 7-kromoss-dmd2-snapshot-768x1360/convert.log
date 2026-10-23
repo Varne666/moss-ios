@@ -1,0 +1,20 @@
+FAILED: Unknown extension tmp
+        2.83 real         0.12 user         1.15 sys
+           701644800  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               80724  page reclaims
+                 446  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  54  voluntary context switches
+                1139  involuntary context switches
+          1552256896  peak memory footprint
+total 0
+drwxr-xr-x  2 runner  staff   64 Oct 23 20:59 .
+drwxr-xr-x  8 runner  staff  256 Oct 23 20:58 ..
