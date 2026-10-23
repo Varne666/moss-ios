@@ -1,0 +1,90 @@
+lodestones/Kromoss 7f9bb7b06d7b6c27d294b0bab5a2b3056c379279
+OpenMOSS-Team/MOSS-Image-Base 85975793d8b3d432f1b6e27f352abaa4c2a4c0d3
+== diffusion_models/kromoss_bf16.safetensors
+x-repo-commit: 7f9bb7b06d7b6c27d294b0bab5a2b3056c379279
+x-linked-size: 10164655808
+x-linked-etag: "54c863b9392f7b6a02f557d32a416b22765b4ffbee322ade9945e379f09adaba"
+== 8-steps-dmd2-lora.safetensors
+x-repo-commit: 7f9bb7b06d7b6c27d294b0bab5a2b3056c379279
+x-linked-size: 1189176800
+x-linked-etag: "7683fe1fb51f73f5d690f24dd6b7f46f31ab9a9873729a854ac5c9a420ffe6f2"
+[
+    {
+        "type": "directory",
+        "oid": "a157c012a3546dceeb2faf4514a02c40df4db17c",
+        "size": 0,
+        "path": "assets"
+    },
+    {
+        "type": "directory",
+        "oid": "1a24f4206808f8e36d29ff54e043d9907761b113",
+        "size": 0,
+        "path": "diffusion_models"
+    },
+    {
+        "type": "directory",
+        "oid": "8c9dc05cde551b6c6a4431b94b2a88fd835a6b82",
+        "size": 0,
+        "path": "scheduler"
+    },
+    {
+        "type": "directory",
+        "oid": "162327fcbc602bb77a003d31ef3d9f838cd6e625",
+        "size": 0,
+        "path": "text_encoder"
+    },
+    {
+        "type": "directory",
+        "oid": "071840517e14bbb2e453fb84e9622c1546e3dd83",
+        "size": 0,
+        "path": "text_encoders"
+    },
+    {
+        "type": "directory",
+        "oid": "9ed978177d0f6bebdd126c169f6665cf37b0d4eb",
+        "size": 0,
+        "path": "tokenizer"
+    },
+    {
+        "type": "directory",
+        "oid": "97e4320a51b079a40897e44508e10eed9ac18277",
+        "size": 0,
+        "path": "transformer"
+    },
+    {
+        "type": "directory",
+        "oid": "56dae38bf9d5f3323b9cdb3cd30cd6b95bd791e3",
+        "size": 0,
+        "path": "vae"
+    },
+    {
+        "type": "file",
+        "oid": "9f15927bcce600fc04ce77384ff8242ca866c6b4",
+        "size": 713,
+        "path": ".gitattributes"
+    },
+    {
+        "type": "file",
+        "oid": "f87904bd9472fadfb4e666ef7a487a1c7f9c906d",
+        "size": 1189176800,
+        "lfs": {
+            "oid": "f0e6cd07f222dfaea798afe3b796e2c2995cadfd44ad56e02ca616f0467aec28",
+            "size": 1189176800,
+            "pointerSize": 135
+        },
+        "xetHash": "890caa850fa220c631f5971cf1969e882571b55ef563b55f1c9ae118d7016a97",
+        "path": "8-steps-dmd-lora.safetensors"
+    },
+    {
+        "type": "file",
+        "oid": "db820ace7d4402bf5a410ca891a47e61e5330e23",
+        "size": 1189176800,
+        "lfs": {
+            "oid": "7683fe1fb51f73f5d690f24dd6b7f46f31ab9a9873729a854ac5c9a420ffe6f2",
+            "size": 1189176800,
+            "pointerSize": 135
+        },
+        "xetHash": "19fddec386d104a623f07f804ba8fa3e429b9216eee70191e5ffe3ee29a2721c",
+        "path": "8-steps-dmd2-lora.safetensors"
+    },
+    {

@@ -1,0 +1,24 @@
+====================================================================================================
+https://huggingface.co/lodestones/Kromoss/resolve/main/8-steps-dmd2-lora.safetensors
+status 206 final host us.aws.cdn.hf.co header bytes 90600
+metadata: {"alpha": "128.0", "rank": "128"}
+tensors: 756 dtypes: Counter({'F32': 756})
+data bytes: 1189086192
+    42 x diffusion_model.layers.N.proj.ffn_down.alpha  F32 []
+    42 x diffusion_model.layers.N.proj.ffn_down.lora_down.weight  F32 [128, 8192]
+    42 x diffusion_model.layers.N.proj.ffn_down.lora_up.weight  F32 [3072, 128]
+    42 x diffusion_model.layers.N.proj.ffn_up_gate.alpha  F32 []
+    42 x diffusion_model.layers.N.proj.ffn_up_gate.lora_down.weight  F32 [128, 3072]
+    42 x diffusion_model.layers.N.proj.ffn_up_gate.lora_up.weight  F32 [16384, 128]
+    42 x diffusion_model.layers.N.proj.k.alpha  F32 []
+    42 x diffusion_model.layers.N.proj.k.lora_down.weight  F32 [128, 3072]
+    42 x diffusion_model.layers.N.proj.k.lora_up.weight  F32 [3072, 128]
+    42 x diffusion_model.layers.N.proj.o.alpha  F32 []
+    42 x diffusion_model.layers.N.proj.o.lora_down.weight  F32 [128, 3072]
+    42 x diffusion_model.layers.N.proj.o.lora_up.weight  F32 [3072, 128]
+    42 x diffusion_model.layers.N.proj.q.alpha  F32 []
+    42 x diffusion_model.layers.N.proj.q.lora_down.weight  F32 [128, 3072]
+    42 x diffusion_model.layers.N.proj.q.lora_up.weight  F32 [3072, 128]
+    42 x diffusion_model.layers.N.proj.v.alpha  F32 []
+    42 x diffusion_model.layers.N.proj.v.lora_down.weight  F32 [128, 3072]
+    42 x diffusion_model.layers.N.proj.v.lora_up.weight  F32 [3072, 128]
