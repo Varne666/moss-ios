@@ -27,7 +27,15 @@ import Combine
     let gallery: GalleryStore
     let loras: LoRAStore
     private var control: RunControl?
-    private let worker = DispatchQueue(label:"Moss.generation",qos:.userInitiated)
+    /// Set when the engine has reported nothing for much longer than expected; shown on the progress card.
+    @Published var stalled: String?
+    private var lastProgressAt = Date()
+    /// Generation runs on its own thread with a large stack (MLX graph building recurses deeply).
+    private func runOnEngineThread(_ body: @escaping () -> Void) {
+        let thread = Thread(block: body)
+        thread.stackSize = 16 << 20; thread.qualityOfService = .userInitiated; thread.name = "Moss.generation"
+        thread.start()
+    }
     init(models: ModelManager, gallery: GalleryStore, loras: LoRAStore = LoRAStore()) {
         self.models = models; self.gallery = gallery; self.loras = loras
         if let quality = UserDefaults.standard.string(forKey:"defaultQuality"), let q = Quality(rawValue:quality) { settings.preset(q) }
@@ -50,7 +58,8 @@ import Combine
             models.refreshSpace()
             guard models.freeBytes > 500_000_000 else { throw MossError.model("Free at least 500 MB so Moss can save your images.") }
             let folder = models.folder, requested = settings, run = RunControl()
-            control = run; running = true; error = nil; message = nil; preview = nil
+            control = run; running = true; error = nil; message = nil; preview = nil; stalled = nil; lastProgressAt = Date()
+            RunLog.add("app: generate \(requested.width)x\(requested.height) \(requested.quality.rawValue) model=\(requested.model.rawValue) loras=\(userLoRAs.map(\.name)) count=\(requested.count) thermal=\(ProcessInfo.processInfo.thermalState.rawValue)")
             progress = .init(message:"Preparing model"); imageNumber = 1; paused = false
             UserDefaults.standard.set(true,forKey:"generationInProgress")
             UIApplication.shared.isIdleTimerDisabled = true
@@ -64,11 +73,11 @@ import Combine
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     guard let self else { return }
-                    if self.running && !self.paused && !self.cooling { self.refreshEstimate() }
+                    if self.running && !self.paused && !self.cooling { self.refreshEstimate(); self.watchdog() }
                 }
             }
             run.pauseChanged = { [weak self] isPaused in let now = Date(); Task { @MainActor in self?.pauseTookEffect(isPaused, at: now) } }
-            worker.async {
+            runOnEngineThread {
                 do {
                     for index in 0..<requested.count {
                         try run.check()
@@ -105,12 +114,30 @@ import Combine
                     Task { @MainActor in self.finish(nil) }
                 } catch { Task { @MainActor in self.finish(error) } }
             }
-        } catch { self.error = error.localizedDescription }
+        } catch { RunLog.add("app: not started: \(error.localizedDescription)"); self.error = error.localizedDescription }
+    }
+    /// Expected longest silence per stage: the encoder and decoder report every layer/strip, sampling every step.
+    private func watchdog() {
+        guard !backgroundCPU else { return }
+        let quiet = Date().timeIntervalSince(lastProgressAt)
+        let limit: Double
+        switch progress.stage {
+        case .starting, .encode: limit = 150
+        case .prepare: limit = 300
+        case .sample: limit = 900
+        case .decode: limit = 600
+        case .done: limit = .infinity
+        }
+        if quiet > limit, stalled == nil {
+            let last = RunLog.last.map { " Last log entry: \($0)." } ?? ""
+            stalled = "Moss has not made progress for \(Int(quiet / 60)) min.\(last) Tap Stop and try again; if it repeats, send a screenshot of Settings → Diagnostics."
+            RunLog.add("app: watchdog - no progress for \(Int(quiet)) s in stage \(progress.stage)")
+        }
     }
     // MARK: Countdown and Live Activity
 
     private func begin(_ settings: GenerationSettings, number: Int, of count: Int) {
-        clock = GenerationClock(plan:.init(settings:settings),calibration:.load())
+        clock = GenerationClock(plan:.init(settings:settings),calibration:.load(),start:Date().timeIntervalSinceReferenceDate)
         imageNumber = number; runStart = Date(); estimatedEnd = nil
         progress = .init(message:count > 1 ? "Image \(number) of \(count)" : "Preparing model")
         let state = activityState()
@@ -118,6 +145,8 @@ import Combine
         refreshEstimate()
     }
     private func advance(_ value: GenerationProgress, at now: Date) {
+        if value.stage != progress.stage { RunLog.add("app: stage \(value.stage) - \(value.message)") }
+        lastProgressAt = now; stalled = nil
         clock?.record(value, at:now.timeIntervalSinceReferenceDate)
         progress = value
         refreshEstimate()
@@ -163,11 +192,13 @@ import Combine
     }
     private func coolingTookEffect(_ hot: Bool, at now: Date) {
         guard running else { return }
+        if !hot { lastProgressAt = now }
         cooling = hot
         if hot { clock?.pause(at:now.timeIntervalSinceReferenceDate) } else if !paused { clock?.resume(at:now.timeIntervalSinceReferenceDate) }
         refreshEstimate(); activity.update(activityState(),force:true)
     }
     private func pauseTookEffect(_ isPaused: Bool, at now: Date) {
+        if !isPaused { lastProgressAt = now }
         paused = isPaused
         if isPaused { clock?.pause(at:now.timeIntervalSinceReferenceDate) } else { clock?.resume(at:now.timeIntervalSinceReferenceDate) }
         if isPaused { activity.update(activityState(),force:true) } else { refreshEstimate(); activity.update(activityState(),force:true) }
@@ -176,6 +207,7 @@ import Combine
     /// CPU; without it, it stops at the next layer boundary and waits.
     func leftScreen() {
         control?.onScreen = false
+        if running { RunLog.add("app: left screen (background task \(continuation.granted ? "granted" : "not granted"))") }
         guard running, !backgroundCPU, !paused else { return }
         let now = Date().timeIntervalSinceReferenceDate
         if continuation.granted {
@@ -191,6 +223,7 @@ import Combine
     func returnedToScreen() {
         control?.onScreen = true
         guard running else { return }
+        RunLog.add("app: back on screen"); lastProgressAt = max(lastProgressAt, Date().addingTimeInterval(-60))
         let now = Date().timeIntervalSinceReferenceDate
         if backgroundCPU {
             control?.useCPU(false); backgroundCPU = false
@@ -209,6 +242,8 @@ import Combine
 
     private func finish(_ error: Error?) {
         let ok = error == nil
+        RunLog.add(ok ? "app: finished" : "app: stopped: \(error!.localizedDescription)")
+        stalled = nil
         activity.end(state:.init(phase: ok ? .finished : .failed, detail: ok ? "Saved to your gallery" : "Stopped", start:runStart, end:Date(), fraction: ok ? 1 : 0))
         continuation.end(success: ok)
         ticker?.cancel(); ticker = nil; cooling = false

@@ -72,7 +72,11 @@ struct GenerationClock {
     private var pausedTotal: TimeInterval = 0
     private var encodeMarks: [TimeInterval] = []
 
-    init(plan: Plan, calibration: Calibration) { self.plan = plan; self.calibration = calibration }
+    /// `start`: when the run began (same time base as `record`), so time spent before the first milestone counts.
+    init(plan: Plan, calibration: Calibration, start: TimeInterval? = nil) {
+        self.plan = plan; self.calibration = calibration
+        if let start { stageStart[.starting] = start }
+    }
 
     /// Monotonic run time excluding pauses.
     private func clock(_ now: TimeInterval) -> TimeInterval { now - pausedTotal - (pausedAt.map { now - $0 } ?? 0) }
@@ -140,17 +144,19 @@ struct GenerationClock {
         switch current.stage {
         case .starting:
             guard let encode = calibration.encode[plan.prompts] else { return nil }
-            return encode + (calibration.prepare ?? 0) + sampling(0, 0) + decode
+            let since = stageStart[.starting].map { t - $0 } ?? 0
+            return max(encode * 0.05, encode - since) + (calibration.prepare ?? 0) + sampling(0, 0) + decode
         case .encode:
             let done = current.index
             var encodeLeft: Double?
             if done >= 2, let first = encodeMarks.first { encodeLeft = (t - first) / Double(done) * Double(32 - done) }
-            else if let total = calibration.encode[plan.prompts], let start = stageStart[.encode] { encodeLeft = max(0, total - (t - start)) }
+            else if let total = calibration.encode[plan.prompts], let start = stageStart[.encode] { encodeLeft = max(total * 0.05, total - (t - start)) }
             guard let left = encodeLeft else { return nil }
             return left + (calibration.prepare ?? 0) + sampling(0, 0) + decode
         case .prepare:
             let since = stageStart[.prepare].map { t - $0 } ?? 0
-            return max(0, (calibration.prepare ?? 0) - since) + sampling(0, 0) + decode
+            let prepare = calibration.prepare ?? 0
+            return max(prepare * 0.05, prepare - since) + sampling(0, 0) + decode
         case .sample:
             let since = lastStepMark.map { t - $0 } ?? 0
             return sampling(current.index, since) + decode
@@ -164,7 +170,8 @@ struct GenerationClock {
     /// Overall completion between 0 and 1, consistent with `remaining`.
     func fraction(at now: TimeInterval) -> Double? {
         guard let left = remaining(at: now) else { return nil }
-        let elapsed = clock(now) - (stageStart[.encode] ?? stageStart[.starting] ?? 0)
+        let t = clock(now)
+        let elapsed = t - (stageStart[.starting] ?? stageStart[.encode] ?? t)
         let total = elapsed + left
         return total > 0 ? min(1, max(0, elapsed / total)) : nil
     }

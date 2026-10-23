@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     @StateObject private var app: AppModel
     @StateObject private var loras: LoRAStore
     init() {
+        RunLog.file = AppPaths.support.appendingPathComponent("diagnostics.log")
+        RunLog.add("app: launch \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") ?? "?") on \(ProcessInfo.processInfo.physicalMemory >> 20) MB RAM")
         let m = ModelManager(), g = GalleryStore(), l = LoRAStore()
         _models = StateObject(wrappedValue:m); _gallery = StateObject(wrappedValue:g); _loras = StateObject(wrappedValue:l)
         _app = StateObject(wrappedValue:AppModel(models:m,gallery:g,loras:l)); AppDelegate.attach(m)
@@ -25,7 +27,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     var body: some Scene {
         WindowGroup {
             RootView().environmentObject(models).environmentObject(gallery).environmentObject(app).environmentObject(loras).tint(Theme.accent).preferredColorScheme(.dark)
-                .onChange(of:phase) { _,value in if value == .active { app.returnedToScreen(); models.resumeIfInterrupted() } else { app.leftScreen() } }
+                .onChange(of:phase) { _,value in
+                    // .inactive (Control Center, a notification, a system prompt) keeps Moss on screen and the GPU usable.
+                    if value == .active { app.returnedToScreen(); models.resumeIfInterrupted() } else if value == .background { app.leftScreen() }
+                }
                 .onReceive(NotificationCenter.default.publisher(for:UIApplication.didReceiveMemoryWarningNotification)) { _ in app.memoryWarning() }
         }
     }

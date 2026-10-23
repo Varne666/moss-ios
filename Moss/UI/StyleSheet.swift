@@ -9,6 +9,7 @@ struct StyleSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var importing = false
     @State private var showModels = false
+    @State private var civitaiKey = ""
 
     private var snapshotLoRA: LoRAStore.Item? { loras.items.first { $0.name.localizedCaseInsensitiveContains("snapshot") } }
 
@@ -25,11 +26,7 @@ struct StyleSheet: View {
                     if !models.kromossReady {
                         Button("Download the Kromoss realism model…") { showModels = true }
                     }
-                    if snapshotLoRA == nil {
-                        Text("Realistic Snapshot comes from Civitai and needs a Civitai login, so Moss can't download it for you. In Safari, open civitai.com/models/2268008, sign in, download the MOSS-Image version, then tap Import LoRA below and pick the file.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Link("Open Realistic Snapshot on Civitai", destination: URL(string: "https://civitai.com/models/2268008?modelVersionId=3417962")!)
-                    }
+                    if snapshotLoRA == nil { snapshotDownload }
                 } footer: { Text("From the MOSS-Image Kromoss Realism workflow. Its res_5s sampler is replaced by the Euler sampler Kromoss recommends for DMD2: the same 8 steps at a fifth of the work.") }
 
                 Section("Prompt") {
@@ -64,6 +61,29 @@ struct StyleSheet: View {
         .preferredColorScheme(.dark)
     }
 
+    /// Realistic Snapshot needs a Civitai account: Moss downloads it with the user's own API key (kept in the
+    /// Keychain), or the user downloads it in Safari and imports the file.
+    @ViewBuilder private var snapshotDownload: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Get the Realistic Snapshot LoRA (580 MB)").font(.subheadline.weight(.semibold))
+            Text("Civitai only lets signed-in accounts download it. Create a free API key on Civitai (Account settings → API Keys → Add API key), copy it, and paste it here. Moss keeps it in this iPhone's Keychain and only sends it to Civitai.")
+                .font(.caption).foregroundStyle(.secondary)
+            Link("Open Civitai API keys", destination: URL(string: "https://civitai.com/user/account")!).font(.caption.weight(.semibold))
+            if let f = loras.downloadFraction {
+                ProgressView(value: f) { Text(f >= 1 ? "Checking file…" : "Downloading \(Int(f * 100))%").font(.caption) }
+                Button("Cancel download", role: .cancel) { loras.cancelDownload() }.font(.caption)
+            } else {
+                SecureField("Civitai API key", text: $civitaiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .onAppear { civitaiKey = loras.civitaiKey ?? "" }
+                Button {
+                    loras.civitaiKey = civitaiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                    loras.downloadSnapshot()
+                } label: { Label("Download Realistic Snapshot", systemImage: "arrow.down.circle.fill") }
+                .disabled(civitaiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Text("Or download the MOSS-Image version in Safari from civitai.com/models/2268008 and tap Import LoRA below.").font(.caption2).foregroundStyle(.secondary)
+        }
+    }
     private func choice(_ item: LoRAStore.Item) -> LoRAChoice? { app.settings.loras.first { $0.id == item.id } }
     @ViewBuilder private func loraRow(_ item: LoRAStore.Item) -> some View {
         let enabled = Binding(get: { choice(item) != nil }, set: { on in

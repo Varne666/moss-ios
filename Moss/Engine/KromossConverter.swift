@@ -25,8 +25,16 @@ enum KromossConverter {
     }
 
     /// Converts `source` into `folder` (base.safetensors + layer-NN.safetensors + marker). `progress(done, total)`.
+    /// Runs on the CPU: it usually happens right after the download, often with Moss in the background, and
+    /// iOS rejects GPU work from background apps.
     static func convert(source: URL, into folder: URL, sourceSHA: String, control: RunControl? = nil,
                         progress: (Int, Int) -> Void) throws {
+        RunLog.add("convert: Kromoss start (CPU)")
+        try Device.withDefaultDevice(Device(.cpu)) { try convertOnCurrentDevice(source: source, into: folder, sourceSHA: sourceSHA, control: control, progress: progress) }
+        RunLog.add("convert: Kromoss done")
+    }
+    private static func convertOnCurrentDevice(source: URL, into folder: URL, sourceSHA: String, control: RunControl?,
+                                               progress: (Int, Int) -> Void) throws {
         let store = try TensorStore(files: [source])
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: folder.appendingPathComponent(marker))

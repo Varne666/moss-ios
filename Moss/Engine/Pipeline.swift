@@ -15,18 +15,24 @@ final class MossPipeline {
     func generate(settings s: GenerationSettings, folder: URL, manifest: ModelManifest, control: RunControl,
                   userLoRAs: [(url: URL, name: String, strength: Float)] = [],
                   progress: @escaping (GenerationProgress) -> Void) throws -> CGImage {
-        try s.validate(); try control.check()
+        RunLog.add("engine: start \(s.width)x\(s.height) \(s.quality.rawValue) steps=\(s.steps) cfg=\(s.guidance) model=\(s.model.rawValue) loras=\(userLoRAs.map { "\($0.name)@\($0.strength)" })")
+        progress(.init(stage:.encode,index:0,total:32,message:"Reading your prompt"))
+        try s.validate()
+        RunLog.add("engine: checking memory and heat")
+        try control.check()
+        RunLog.add("engine: setting up GPU memory")
         Memory.cacheLimit = 64 * 1024 * 1024
         // Leave headroom for UIKit, decoding, and the operating system. This is not a guarantee against jetsam.
         Memory.memoryLimit = Int(ProcessInfo.processInfo.physicalMemory * 3 / 4)
         defer { Memory.clearCache() }
+        RunLog.add("engine: GPU ready")
         func store(_ component: String) throws -> TensorStore {
             let urls = manifest.files.filter { $0.component == component && $0.path.hasSuffix(".safetensors") }.map { folder.appendingPathComponent($0.path) }
             guard !urls.isEmpty else { throw MossError.model("The model is missing its \(component) files.") }
             return try TensorStore(files:urls)
         }
-        progress(.init(stage:.encode,index:0,total:32,message:"Reading your prompt"))
         let contexts: (MLXArray,MLXArray?) = try autoreleasepool {
+            RunLog.add("engine: loading tokenizer")
             let tokenizer = try MossTokenizer(url:folder.appendingPathComponent("tokenizer/tokenizer.json"))
             let positive = try tokenizer.encode(s.effectivePrompt)
             let negative = s.guidance != 1 ? try tokenizer.encode(s.negativePrompt) : nil
@@ -34,6 +40,7 @@ final class MossPipeline {
             guard positive.count <= 1024, (negative?.count ?? 0) <= 1024 else {
                 throw MossError.model("This prompt is too long for the phone memory limit. Shorten it to roughly 600 words or simplify the JSON layout. Your text has not been truncated.")
             }
+            RunLog.add("engine: prompt \(positive.count) tokens, negative \(negative?.count ?? 0); text encoder")
             let encoder = try MossTextEncoder(store:store("text"),control:control,progress:{ done in progress(.init(stage:.encode,index:done,total:32,message:"Reading your prompt")) })
             let encoded = try encoder.encode(prompts: negative.map { [positive, $0] } ?? [positive])
             return (encoded[0], encoded.count > 1 ? encoded[1] : nil)
@@ -50,6 +57,7 @@ final class MossPipeline {
                 loras.append(try LoRAFile(url: folder.appendingPathComponent(file.path), name: "Fast (DMD2)", strength: 1))
             }
             for extra in userLoRAs { loras.append(try LoRAFile(url: extra.url, name: extra.name, strength: extra.strength)) }
+            for l in loras { RunLog.add("engine: LoRA \(l.name) strength \(l.strength): \(l.layerCount) blocks, \(l.ignored) tensors ignored") }
             let imageStore: TensorStore
             if s.model == .kromoss {
                 guard let source = manifest.files.first(where: { $0.component == "kromoss" }),
@@ -59,12 +67,14 @@ final class MossPipeline {
                 imageStore = try TensorStore(files: urls)
             } else { imageStore = try store("transformer") }
             let transformer = try MossTransformer(store:imageStore,loras:loras,control:control,cacheBudget:control.layerCacheBudget(pixels:s.width*s.height))
+            RunLog.add("engine: text done; preparing image model")
             progress(.init(stage:.prepare,index:0,total:1,message:"Preparing the image model"))
             var branches = [try transformer.prepare(context:contexts.0,height:h,width:w,skipped:[])]
             if let negative = contexts.1 {
                 branches.append(try transformer.prepare(context:negative,height:h,width:w,skipped:s.skipLayer ? [22] : []))
             }
             let stepCount = schedule.count-1
+            RunLog.add("engine: image model ready; sampling \(stepCount) steps")
             for i in 0..<stepCount {
                 try control.check()
                 progress(.init(stage:.sample,index:i,total:stepCount,message:"Step \(i+1) of \(stepCount)"))
@@ -75,10 +85,12 @@ final class MossPipeline {
                     let next = latent + velocity*(schedule[i+1]-schedule[i]); eval(next); return next
                 }
                 Memory.clearCache()
+                RunLog.add("engine: step \(i+1)/\(stepCount) done on \(control.usesCPU ? "CPU" : "GPU")")
             }
             progress(.init(stage:.sample,index:stepCount,total:stepCount,message:"Step \(stepCount) of \(stepCount)"))
         }
         Memory.clearCache(); try control.check()
+        RunLog.add("engine: sampling done; decoding")
         progress(.init(stage:.decode,index:0,total:4,message:"Finishing the image"))
         return try autoreleasepool {
             let decoder = try MossDecoder(store:store("vae"),control:control,progress:{ done in progress(.init(stage:.decode,index:done,total:4,message:"Finishing the image")) })

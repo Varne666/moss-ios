@@ -9,7 +9,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Civitai
+        continue-on-error: true
+        run: |
+          mkdir -p out
+          for host in civitai.com civitai.red; do
+            echo "== $host version" >> out/civitai.txt
+            curl -sSL -m 30 "https://$host/api/v1/model-versions/3417962" >> out/civitai.txt 2>&1; echo >> out/civitai.txt
+            echo "== $host model" >> out/civitai.txt
+            curl -sSL -m 30 "https://$host/api/v1/models/2268008" | head -c 20000 >> out/civitai.txt 2>&1; echo >> out/civitai.txt
+            echo "== $host download head" >> out/civitai.txt
+            curl -sSI -m 30 "https://$host/api/download/models/3417962" >> out/civitai.txt 2>&1
+          done
       - name: Headers
+        continue-on-error: true
         run: |
           mkdir -p out
           python3 scripts/remote_headers.py $(cat ci/urls.txt) 2>&1 | tee out/headers.txt

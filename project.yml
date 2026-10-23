@@ -32,8 +32,8 @@ targets:
       path: Moss/Info.plist
       properties:
         CFBundleDisplayName: Moss
-        CFBundleShortVersionString: 1.0.2
-        CFBundleVersion: '3'
+        CFBundleShortVersionString: "1.0.3"
+        CFBundleVersion: "4"
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
@@ -74,8 +74,8 @@ targets:
       path: MossActivity/Info.plist
       properties:
         CFBundleDisplayName: Moss
-        CFBundleShortVersionString: 1.0.2
-        CFBundleVersion: '3'
+        CFBundleShortVersionString: "1.0.3"
+        CFBundleVersion: "4"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

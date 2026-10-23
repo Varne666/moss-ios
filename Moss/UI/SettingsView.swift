@@ -80,7 +80,8 @@ struct SettingsView: View {
             }
             Section("Gallery") { Button("Clear gallery",role:.destructive) { clear = true }.disabled(app.running || gallery.items.isEmpty) }
             Section("About") {
-                LabeledContent("Version",value:"1.0.2 (3)")
+                LabeledContent("Version",value:"1.0.3 (4)")
+                NavigationLink("Diagnostics") { DiagnosticsView() }
                 Text("Offline generation. No analytics, tracking, or app account. Network access is used to download model files only.").font(.callout)
                 Text("iPhone inference has not been validated by the project author on a physical device. A smaller image uses less memory. Keep the app open while generating.").font(.caption).foregroundStyle(.secondary)
                 Link("MOSS model and license",destination:URL(string:"https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base")!)
@@ -90,5 +91,30 @@ struct SettingsView: View {
             .confirmationDialog("Delete every image in Moss?",isPresented:$clear,titleVisibility:.visible) {
                 Button("Delete all images",role:.destructive) { gallery.delete(Set(gallery.items.map(\.id))) }
             } message: { Text("This cannot be undone. Copies you saved to Photos are kept.") }
+    }
+}
+
+/// The engine's timestamped log of recent runs, to screenshot or share when something goes wrong.
+struct DiagnosticsView: View {
+    @State private var text = RunLog.text
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                Text(text.isEmpty ? "Nothing logged yet." : text)
+                    .font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                Color.clear.frame(height: 1).id("end")
+            }
+            .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+        }
+        .background(Theme.canvas)
+        .navigationTitle("Diagnostics").navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { text = RunLog.text } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Refresh")
+                ShareLink(item: text.isEmpty ? "Nothing logged yet." : text) { Image(systemName: "square.and.arrow.up") }
+                Button { UIPasteboard.general.string = text } label: { Image(systemName: "doc.on.doc") }.accessibilityLabel("Copy")
+            }
+        }
     }
 }

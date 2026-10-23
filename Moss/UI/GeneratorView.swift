@@ -24,6 +24,9 @@ struct GeneratorView: View {
                     if let message = app.message, !app.running {
                         Text(message).font(.footnote).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center).padding(.horizontal, 8)
                     }
+                    if app.running, let stalled = app.stalled {
+                        Text(stalled).font(.footnote).foregroundStyle(.orange).multilineTextAlignment(.center).padding(.horizontal, 8)
+                    }
                     if app.running {
                         GenerationProgressCard(paused: app.paused, cooling: app.cooling, onStop: { app.cancel() }, runStart: app.runStart, estimatedEnd: app.estimatedEnd, status: statusLine, stageFraction: stageFraction)
                             .transition(.move(edge: .bottom).combined(with: .opacity))

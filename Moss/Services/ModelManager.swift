@@ -365,6 +365,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     }
     private func fail(_ error: Error) {
         currentPath = nil; speed = 0
+        RunLog.add("download: failed: \(error.localizedDescription)")
         self.error = error.localizedDescription; busy = false; downloading = false; active?.cancel(); active = nil; currentFile = nil
         message = "Download needs attention"; UIApplication.shared.isIdleTimerDisabled = false; endBackgroundTime()
         withContinuation { $0.end(success: false) }

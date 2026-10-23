@@ -85,6 +85,17 @@ final class MossTests: XCTestCase {
         fast2.record(.init(stage:.encode,index:0,total:32,message:""),at:0)
         XCTAssertNotNil(fast2.remaining(at:1))
     }
+    /// Regression (1.0.2): before the first milestone the countdown stood still, so the finish time kept moving and
+    /// the percentage crept up with nothing happening.
+    func testCountdownRunsDownBeforeFirstMilestone() {
+        var settings = GenerationSettings(); settings.prompt = "a cat"; settings.preset(.fast)
+        var c = GenerationClock.Calibration(); c.encode[1] = 20; c.prepare = 5; c.steps = [.init(work: GenerationClock.Plan(settings: settings).stepWork, seconds: 10)]
+        let clock = GenerationClock(plan:.init(settings:settings),calibration:c,start:100)
+        let a = clock.remaining(at:100) ?? -1, b = clock.remaining(at:110) ?? -1
+        XCTAssertEqual(a - b, 10, accuracy:0.01, "Waiting time is subtracted")
+        XCTAssertEqual(clock.fraction(at:110) ?? -1, 10 / (10 + b), accuracy:0.001)
+        XCTAssertLessThan(clock.fraction(at:110) ?? 1, 0.2, "No large percentage without progress")
+    }
     func testLoRAKeyLayouts() {
         XCTAssertEqual(LoRAFile.parse("diffusion_model.layers.3.proj.q.lora_down.weight")?.0, 3)
         XCTAssertEqual(LoRAFile.parse("diffusion_model.layers.3.proj.q.lora_down.weight")?.2, "down")
