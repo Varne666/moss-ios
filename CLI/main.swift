@@ -42,6 +42,19 @@ if flag("--selftest") {
     exit(0)
 }
 
+if let source = argument("--convert-kromoss"), let modelPath = argument("--models"), let manifestPath = argument("--manifest") {
+    do {
+        let manifest = try JSONDecoder().decode(ModelManifest.self, from: Data(contentsOf: URL(fileURLWithPath: manifestPath)))
+        guard let file = manifest.files.first(where: { $0.component == "kromoss" }) else { print("FAILED: manifest has no kromoss entry"); exit(1) }
+        let start = Date(); let sampler = PeakSampler(); sampler.start()
+        try KromossConverter.convert(source: URL(fileURLWithPath: source), into: URL(fileURLWithPath: modelPath).appendingPathComponent("kromoss"), sourceSHA: file.sha256) { done, total in
+            if done % 6 == 0 || done == total { print(String(format: "converted %d/%d  %.0fs  footprint=%@", done, total, Date().timeIntervalSince(start), gib(footprintBytes()))) }
+        }
+        print(String(format: "CONVERTED in %.0fs, peak footprint %@", Date().timeIntervalSince(start), gib(sampler.peak)))
+        exit(0)
+    } catch { print("FAILED: \(error.localizedDescription)"); exit(1) }
+}
+
 guard let modelPath = argument("--models"), let manifestPath = argument("--manifest"), let outPath = argument("--out") else {
     print("usage: MossCLI --models DIR --manifest model-manifest.json --out image.png [--prompt TEXT] [--negative TEXT] [--width N] [--height N] [--preset fast|balanced|best] [--steps N] [--guidance G] [--shift S] [--seed N] [--no-skip]")
     exit(2)
@@ -59,6 +72,15 @@ do {
     if let v = argument("--shift").flatMap(Float.init) { s.shift = v }
     s.seed = UInt32(argument("--seed") ?? "") ?? 42
     if flag("--no-skip") { s.skipLayer = false }
+    if argument("--model") == "kromoss" { s.model = .kromoss }
+    if flag("--snapshot") { s.snapshotStyle = true }
+    // --lora /path/file.safetensors:0.8 (repeatable)
+    var userLoRAs: [(url: URL, name: String, strength: Float)] = []
+    for (i, a) in CommandLine.arguments.enumerated() where a == "--lora" && i + 1 < CommandLine.arguments.count {
+        let spec = CommandLine.arguments[i + 1]; let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
+        userLoRAs.append((URL(fileURLWithPath: parts[0]), URL(fileURLWithPath: parts[0]).lastPathComponent, parts.count > 1 ? Float(parts[1]) ?? 1 : 1))
+    }
+    print("model: \(s.model.rawValue) snapshot=\(s.snapshotStyle) loras=\(userLoRAs.map { "\($0.name)@\($0.strength)" })")
     print("settings: \(s.width)x\(s.height) quality=\(s.quality.rawValue) steps=\(s.steps) guidance=\(s.guidance) shift=\(s.shift) skip22=\(s.skipLayer) seed=\(s.seed)")
     print("prompt: \(s.prompt)")
     let sampler = PeakSampler(); sampler.start()
@@ -68,7 +90,7 @@ do {
         let parts = text.split(separator: "-").compactMap { Int($0) }; return parts.count == 2 ? parts[0]...parts[1] : nil }
     let start = Date()
     var last = Date()
-    let image = try MossPipeline().generate(settings: s, folder: URL(fileURLWithPath: modelPath), manifest: manifest, control: control) { p in
+    let image = try MossPipeline().generate(settings: s, folder: URL(fileURLWithPath: modelPath), manifest: manifest, control: control, userLoRAs: userLoRAs) { p in
         let now = Date()
         if let cpuRange, p.stage == .sample {
             let cpu = cpuRange.contains(p.index + 1)

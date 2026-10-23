@@ -25,10 +25,11 @@ import Combine
     @Published var backgroundCPU = false
     let models: ModelManager
     let gallery: GalleryStore
+    let loras: LoRAStore
     private var control: RunControl?
     private let worker = DispatchQueue(label:"Moss.generation",qos:.userInitiated)
-    init(models: ModelManager, gallery: GalleryStore) {
-        self.models = models; self.gallery = gallery
+    init(models: ModelManager, gallery: GalleryStore, loras: LoRAStore = LoRAStore()) {
+        self.models = models; self.gallery = gallery; self.loras = loras
         if let quality = UserDefaults.standard.string(forKey:"defaultQuality"), let q = Quality(rawValue:quality) { settings.preset(q) }
         let width = UserDefaults.standard.integer(forKey:"defaultWidth"), height = UserDefaults.standard.integer(forKey:"defaultHeight")
         if width > 0 && height > 0 { settings.width = width; settings.height = height }
@@ -42,7 +43,10 @@ import Combine
         do {
             try settings.validate()
             guard models.ready, !models.busy, let manifest = models.manifest else { throw MossError.model("Finish downloading and verifying the model first.") }
-            guard settings.quality != .fast || models.fastReady else { throw MossError.model("Download the Fast adapter in Settings before using Fast.") }
+            guard settings.quality != .fast || models.fastReady else { throw MossError.model("Download the Fast add-on (DMD2) in Settings → Models before using Fast.") }
+            guard settings.model != .kromoss || models.kromossReady else { throw MossError.model("Download the Kromoss realism model in Settings → Models, or switch the model to MOSS Base.") }
+            settings.loras = settings.loras.filter { loras.item($0.id) != nil }
+            let userLoRAs = settings.loras.compactMap { c in loras.item(c.id).map { (url: loras.url($0), name: $0.name, strength: c.strength) } }
             models.refreshSpace()
             guard models.freeBytes > 500_000_000 else { throw MossError.model("Free at least 500 MB so Moss can save your images.") }
             let folder = models.folder, requested = settings, run = RunControl()
@@ -76,7 +80,7 @@ import Combine
                         Task { @MainActor in self.begin(actual, number:index+1, of:requested.count); semaphoreStart.signal() }
                         semaphoreStart.wait()
                         let image = UIImage(cgImage: try autoreleasepool {
-                            try MossPipeline().generate(settings:actual,folder:folder,manifest:manifest,control:run) { value in
+                            try MossPipeline().generate(settings:actual,folder:folder,manifest:manifest,control:run,userLoRAs:userLoRAs) { value in
                                 let now = Date()
                                 Task { @MainActor in self.advance(value, at:now) }
                             }

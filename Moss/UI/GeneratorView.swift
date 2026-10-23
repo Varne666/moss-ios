@@ -6,6 +6,8 @@ struct GeneratorView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var models: ModelManager
     @State private var showAdvanced = false
+    @State private var showStyle = false
+    @EnvironmentObject var loras: LoRAStore
     @State private var showImage = true
     @FocusState private var editing: Bool
 
@@ -36,6 +38,7 @@ struct GeneratorView: View {
         .foregroundStyle(Theme.textPrimary)
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showAdvanced) { AdvancedSheet().environmentObject(app).presentationDetents([.medium, .large]).presentationBackground(Theme.panel) }
+        .sheet(isPresented: $showStyle) { StyleSheet().environmentObject(app).environmentObject(models).environmentObject(loras).presentationDetents([.large]).presentationBackground(Theme.panel) }
     }
 
     // MARK: Header
@@ -113,23 +116,38 @@ struct GeneratorView: View {
             }
             HStack(spacing: 8) {
                 if !app.running {
-                    Menu {
-                        ForEach(AspectPreset.all, id: \.label) { entry in
-                            Button { app.settings.width = entry.width; app.settings.height = entry.height } label: {
-                                if currentAspect == entry.label { Label("\(entry.label)  ·  \(entry.width)×\(entry.height)", systemImage: "checkmark") }
-                                else { Text("\(entry.label)  ·  \(entry.width)×\(entry.height)") }
-                            }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            Menu {
+                                ForEach(AspectPreset.all, id: \.label) { entry in
+                                    Button { app.settings.width = entry.width; app.settings.height = entry.height } label: {
+                                        if currentAspect == entry.label { Label("\(entry.label)  ·  \(entry.width)×\(entry.height)", systemImage: "checkmark") }
+                                        else { Text("\(entry.label)  ·  \(entry.width)×\(entry.height)") }
+                                    }
+                                }
+                            } label: { ChipLabel(icon: "aspectratio", text: currentAspect ?? "\(app.settings.width)×\(app.settings.height)") }
+                            Menu {
+                                ForEach(Quality.allCases) { q in
+                                    Button { app.settings.preset(q) } label: {
+                                        Label(q.rawValue + (q == .fast ? "  ·  8 steps" : q == .balanced ? "  ·  30 steps" : "  ·  50 steps"), systemImage: app.settings.quality == q ? "checkmark" : qualityIcon(q))
+                                    }.disabled(q == .fast && !models.fastReady)
+                                }
+                            } label: { ChipLabel(icon: qualityIcon(app.settings.quality), text: app.settings.quality.rawValue) }
+                            Menu {
+                                ForEach(ImageModel.allCases) { m in
+                                    Button { app.settings.model = m } label: {
+                                        if app.settings.model == m { Label(m.rawValue + (m == .kromoss ? "  ·  realism" : ""), systemImage: "checkmark") }
+                                        else { Text(m.rawValue + (m == .kromoss ? (models.kromossReady ? "  ·  realism" : "  ·  download in Style") : "")) }
+                                    }.disabled(m == .kromoss && !models.kromossReady)
+                                }
+                            } label: { ChipLabel(icon: "cube", text: app.settings.model == .kromoss ? "Kromoss" : "Base") }
+                            Button { showStyle = true } label: {
+                                ChipLabel(icon: "camera.aperture", text: styleLabel, active: app.settings.snapshotStyle || !app.settings.loras.isEmpty)
+                            }.accessibilityLabel("Style and LoRAs")
+                            Button { showAdvanced = true } label: { ChipLabel(icon: "slider.horizontal.3", text: "") }
+                                .accessibilityLabel("Advanced settings")
                         }
-                    } label: { ChipLabel(icon: "aspectratio", text: currentAspect ?? "\(app.settings.width)×\(app.settings.height)") }
-                    Menu {
-                        ForEach(Quality.allCases) { q in
-                            Button { app.settings.preset(q) } label: {
-                                Label(q.rawValue + (q == .fast ? "  ·  8 steps" : q == .balanced ? "  ·  30 steps" : "  ·  50 steps"), systemImage: app.settings.quality == q ? "checkmark" : qualityIcon(q))
-                            }.disabled(q == .fast && !models.fastReady)
-                        }
-                    } label: { ChipLabel(icon: qualityIcon(app.settings.quality), text: app.settings.quality.rawValue) }
-                    Button { showAdvanced = true } label: { ChipLabel(icon: "slider.horizontal.3", text: "") }
-                        .accessibilityLabel("Advanced settings")
+                    }
                 }
                 Spacer(minLength: 4)
                 Button {
@@ -148,6 +166,10 @@ struct GeneratorView: View {
         }
         .padding(14).glassPanel(radius: 28)
         .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { editing = false } } }
+    }
+    private var styleLabel: String {
+        if let first = app.settings.loras.first { return app.settings.loras.count > 1 ? "\(app.settings.loras.count) LoRAs" : first.name }
+        return app.settings.snapshotStyle ? "Snapshot" : "Style"
     }
     private var currentAspect: String? { AspectPreset.all.first { $0.width == app.settings.width && $0.height == app.settings.height }?.label }
     private func qualityIcon(_ q: Quality) -> String { q == .fast ? "bolt.fill" : q == .balanced ? "circle.lefthalf.filled" : "sparkles" }

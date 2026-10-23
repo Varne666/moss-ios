@@ -15,7 +15,8 @@ struct ModelGroup: Identifiable {
             ("transformer", "Image model", "cube.transparent"),
             ("vae", "Image decoder", "wand.and.rays"),
             ("text", "Text encoder", "text.bubble"),
-            ("adapter", "Fast add-on", "bolt.fill"),
+            ("adapter", "Fast add-on (DMD2)", "bolt.fill"),
+            ("kromoss", "Realism model (Kromoss)", "camera.aperture"),
         ]
         return order.compactMap { id, title, icon in
             let files = manifest.files.filter { $0.component == id }
@@ -29,6 +30,7 @@ struct SetupView: View {
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var app: AppModel
     @AppStorage("includeFastDownload") private var includeFast = true
+    @AppStorage("includeKromossDownload") private var includeKromoss = true
     @State private var confirmCellular = false
 
     var body: some View {
@@ -46,19 +48,26 @@ struct SetupView: View {
         }
         .foregroundStyle(Theme.textPrimary)
         .confirmationDialog("Download using cellular data?", isPresented: $confirmCellular, titleVisibility: .visible) {
-            Button("Download using cellular") { models.download(includeFast: includeFast, allowCellular: true) }
+            Button("Download using cellular") { models.download(includeFast: includeFast, includeKromoss: includeKromoss, allowCellular: true) }
             Button("Cancel", role: .cancel) {}
         } message: { Text("About \(AppPaths.bytes(wantedBytes)). Your carrier may charge for this data.") }
         .onAppear { models.refreshSpace() }
     }
 
     private var groups: [ModelGroup] { models.manifest.map(ModelGroup.all) ?? [] }
-    private var wantedGroups: [ModelGroup] { groups.filter { !$0.optional || includeFast || models.fastReady } }
+    private func wanted(_ group: ModelGroup) -> Bool {
+        switch group.id {
+        case "adapter": return includeFast || models.fastReady
+        case "kromoss": return includeKromoss || models.kromossReady
+        default: return true
+        }
+    }
+    private var wantedGroups: [ModelGroup] { groups.filter(wanted) }
     private var wantedBytes: Int64 { wantedGroups.reduce(0) { $0 + $1.bytes } }
 
     private func have(_ file: ModelFile) -> Int64 {
         switch models.state(of: file) {
-        case .done, .checking: return file.bytes
+        case .done, .checking, .converting: return file.bytes
         case .downloading(let n): return n
         case .queued(let n), .missing(let n): return n
         }
@@ -114,13 +123,14 @@ struct SetupView: View {
         .padding(.vertical, 6).glassPanel()
     }
 
-    private enum RowState { case done, active, checking, queued, idle, skipped }
+    private enum RowState: Equatable { case done, active, checking, converting(Double), queued, idle, skipped }
     private func rowState(_ group: ModelGroup) -> RowState {
         let states = group.files.map { models.state(of: $0) }
         if states.allSatisfy({ $0 == .done }) { return .done }
+        for state in states { if case .converting(let f) = state { return .converting(f) } }
         if states.contains(.checking) { return .checking }
         if states.contains(where: { if case .downloading = $0 { return true }; return false }) { return .active }
-        if group.optional && !includeFast && !models.fastReady { return .skipped }
+        if !wanted(group) { return .skipped }
         if models.downloading { return .queued }
         return .idle
     }
@@ -128,12 +138,13 @@ struct SetupView: View {
     @ViewBuilder private func row(_ group: ModelGroup) -> some View {
         let state = rowState(group)
         let got = have(group), remaining = group.bytes - got
+        let lit = state == .active || state == .checking || { if case .converting = state { return true }; return false }()
         HStack(spacing: 14) {
             ZStack {
-                Circle().fill(state == .active || state == .checking ? Theme.accent.opacity(0.16) : Theme.raised)
+                Circle().fill(lit ? Theme.accent.opacity(0.16) : Theme.raised)
                 Image(systemName: state == .done ? "checkmark" : group.icon)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(state == .active || state == .checking ? Theme.accent : Theme.textSecondary)
+                    .foregroundStyle(lit ? Theme.accent : Theme.textSecondary)
             }.frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
@@ -143,14 +154,17 @@ struct SetupView: View {
                         .font(.system(size: 14, weight: state == .active ? .semibold : .regular)).monospacedDigit()
                         .foregroundStyle(state == .active ? Theme.accent : Theme.textSecondary)
                 }
-                if state == .active || state == .checking {
+                if case .converting(let f) = state {
+                    MossBar(value: f)
+                    Text("Converting for iPhone (one time). The 10 GB original is deleted afterwards.").font(.caption).foregroundStyle(Theme.textSecondary)
+                } else if state == .active || state == .checking {
                     MossBar(value: Double(got) / Double(max(1, group.bytes)))
                     Text(detail(state, group: group, got: got)).font(.caption).foregroundStyle(Theme.textSecondary).monospacedDigit()
                 }
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
-        .foregroundStyle(state == .active || state == .checking ? Theme.textPrimary : Theme.textSecondary)
+        .foregroundStyle(lit ? Theme.textPrimary : Theme.textSecondary)
         .opacity(state == .done ? 0.38 : state == .queued || state == .skipped ? 0.62 : 1)
         .animation(.easeInOut(duration: 0.3), value: state)
         .accessibilityElement(children: .combine)
@@ -160,6 +174,7 @@ struct SetupView: View {
         switch state {
         case .done: return "Done · \(AppPaths.bytes(group.bytes))"
         case .checking: return "Checking"
+        case .converting(let f): return "Preparing · \(Int(f * 100))%"
         case .active: return seconds(remaining).map { "\(durationText($0)) left" } ?? "Starting…"
         case .queued: return seconds(remaining).map { "Queued · ~\(durationText($0))" } ?? "Queued · \(AppPaths.bytes(remaining))"
         case .skipped: return "Off · \(AppPaths.bytes(group.bytes))"
@@ -178,20 +193,28 @@ struct SetupView: View {
 
     private var controls: some View {
         VStack(spacing: 14) {
-            if !models.ready || !models.fastReady {
+            if !models.fastReady {
                 Toggle(isOn: $includeFast) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Include Fast add-on").font(.subheadline.weight(.semibold))
+                        Text("Include Fast add-on (DMD2)").font(.subheadline.weight(.semibold))
                         Text("Recommended. Sharp 1-megapixel images in 8 steps.").font(.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                }.tint(Theme.accent).disabled(models.downloading)
+            }
+            if !models.kromossReady {
+                Toggle(isOn: $includeKromoss) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Include Kromoss realism model").font(.subheadline.weight(.semibold))
+                        Text("Photoreal fine-tune of MOSS. 10.2 GB download, 5.6 GB once prepared.").font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                 }.tint(Theme.accent).disabled(models.downloading)
             }
             Button {
                 if models.downloading { models.pause() }
                 else if models.cellular { confirmCellular = true }
-                else { models.download(includeFast: includeFast) }
+                else { models.download(includeFast: includeFast, includeKromoss: includeKromoss) }
             } label: {
-                Label(models.downloading ? "Pause" : (overallFraction > 0 ? "Resume download" : "Download"),
+                Label(models.downloading ? "Pause" : (models.ready ? "Download selected" : overallFraction > 0 ? "Resume download" : "Download"),
                       systemImage: models.downloading ? "pause.fill" : "arrow.down")
                     .frame(maxWidth: .infinity)
             }

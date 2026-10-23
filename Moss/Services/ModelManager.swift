@@ -8,6 +8,10 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     @Published var manifest: ModelManifest?
     @Published var ready = false
     @Published var fastReady = false
+    /// Kromoss realism model downloaded and converted for the iPhone.
+    @Published var kromossReady = false
+    /// 0...1 while the Kromoss checkpoint is being converted on the device.
+    @Published var converting: Double?
     @Published var busy = false
     @Published var downloading = false
     @Published var message = "Checking model files"
@@ -25,6 +29,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     /// File being SHA-256 checked after download.
     @Published var checkingPath: String?
     @Published private(set) var wantedFast = false
+    @Published private(set) var wantedKromoss = false
     /// Earlier builds used a background URLSession; iOS may still deliver its events once. Nothing to finish.
     var backgroundCompletion: (() -> Void)? { didSet { backgroundCompletion?(); backgroundCompletion = nil } }
     private var completed = Set<String>()
@@ -45,7 +50,10 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
         else { DispatchQueue.main.async { MainActor.assumeIsolated { body(self.continuation) } } }
     }
     private var continuationGranted: Bool { Thread.isMainThread ? MainActor.assumeIsolated { continuation.granted } : false }
-    private var wantedBytes: Int64 { manifest?.files.filter { !$0.optional || wantedFast }.reduce(0) { $0 + $1.bytes } ?? 1 }
+    func wanted(_ file: ModelFile) -> Bool {
+        !file.optional || (file.component == "adapter" && wantedFast) || (file.component == "kromoss" && wantedKromoss)
+    }
+    private var wantedBytes: Int64 { manifest?.files.filter(wanted).reduce(0) { $0 + $1.bytes } ?? 1 }
     private var doneBytes: Int64 { manifest?.files.filter { completed.contains($0.path) }.reduce(0) { $0 + $1.bytes } ?? 0 }
     private var queue: [ModelFile] = []
     private var allowCellular = false
@@ -72,9 +80,11 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     override init() {
         super.init()
         do {
-            if let data = UserDefaults.standard.data(forKey:"manifest") {
-                let saved = try JSONDecoder().decode(ModelManifest.self,from:data); try saved.validate(); manifest = saved
-            } else { manifest = try .bundled() }
+            if let data = UserDefaults.standard.data(forKey:"manifest"), let saved = try? JSONDecoder().decode(ModelManifest.self,from:data), (try? saved.validate()) != nil {
+                manifest = saved
+            } else { UserDefaults.standard.removeObject(forKey:"manifest"); manifest = try .bundled() }
+            wantedFast = UserDefaults.standard.object(forKey:"downloadFast") as? Bool ?? true
+            wantedKromoss = UserDefaults.standard.bool(forKey:"downloadKromoss")
             if let bookmark = UserDefaults.standard.data(forKey:"modelBookmark") {
                 var stale = false
                 let url = try URL(resolvingBookmarkData:bookmark,options:[.withoutUI],relativeTo:nil,bookmarkDataIsStale:&stale)
@@ -83,6 +93,8 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
                 if stale { try saveBookmark(url) }
             }
             try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+            // 1.0.x used the first DMD adapter; the Fast add-on is now DMD2, so the old 1.2 GB file is removed.
+            try? FileManager.default.removeItem(at:folder.appendingPathComponent("adapter/lora.safetensors"))
             refreshSpace()
         } catch { self.error = error.localizedDescription; message = "Model setup needs attention" }
         monitor.pathUpdateHandler = { [weak self] path in DispatchQueue.main.async { self?.cellular = path.isExpensive } }
@@ -139,6 +151,11 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             var good = Set<String>()
             let records = UserDefaults.standard.dictionary(forKey:"verifiedFingerprints") as? [String:String] ?? [:]
             for (i,file) in manifest.files.enumerated() {
+                if file.convertsOnDevice {
+                    let converted = KromossConverter.converted(in:location.appendingPathComponent("kromoss"),sourceSHA:file.sha256) != nil
+                    if converted { good.insert(file.path) }
+                    continue
+                }
                 let url = location.appendingPathComponent(file.path)
                 let key = Self.folderKey(location) + "|" + file.path
                 // Earlier builds keyed records by the full container path; accept those too (same size and date).
@@ -157,14 +174,17 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     private func refreshStatus() {
         guard let manifest else { return }
         ready = manifest.files.filter { !$0.optional }.allSatisfy { completed.contains($0.path) }
-        fastReady = manifest.files.filter(\.optional).allSatisfy { completed.contains($0.path) }
+        fastReady = manifest.files.filter { $0.component == "adapter" }.allSatisfy { completed.contains($0.path) }
+        kromossReady = manifest.files.filter { $0.component == "kromoss" }.allSatisfy { completed.contains($0.path) }
         message = ready ? "Model verified · ready offline" : "Model setup required"
     }
-    func download(includeFast: Bool = false, allowCellular: Bool = false) {
+    func download(includeFast: Bool = false, includeKromoss: Bool? = nil, allowCellular: Bool = false) {
         guard !busy, let manifest else { return }
         self.allowCellular = allowCellular; wantedFast = includeFast; UserDefaults.standard.set(includeFast,forKey:"downloadFast"); paused = false; refreshSpace()
-        queue = manifest.files.filter { (!($0.optional) || includeFast) && !completed.contains($0.path) }
-        let needed = queue.reduce(Int64(0)) { total, file in total + max(0, file.bytes - partialBytes(file)) }
+        if let includeKromoss { wantedKromoss = includeKromoss; UserDefaults.standard.set(includeKromoss,forKey:"downloadKromoss") }
+        queue = manifest.files.filter { wanted($0) && !completed.contains($0.path) }
+        // Kromoss also needs room for its converted copy (about 5.6 GB) until the original is deleted.
+        let needed = queue.reduce(Int64(0)) { total, file in total + max(0, file.bytes - partialBytes(file)) + (file.convertsOnDevice ? 5_700_000_000 : 0) }
         guard freeBytes > needed + 1_500_000_000 else { error = "Free at least \(AppPaths.bytes(needed+1_500_000_000)) before downloading. Moss needs room for checking the files too."; return }
         busy = true; downloading = true; retries = 0; resumeWhenActive = false
         UIApplication.shared.isIdleTimerDisabled = true
@@ -222,7 +242,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
     func resumeIfInterrupted() {
         guard resumeWhenActive, !busy else { return }
         resumeWhenActive = false; error = nil
-        download(includeFast:wantedFast,allowCellular:allowCellular)
+        download(includeFast:wantedFast,includeKromoss:wantedKromoss,allowCellular:allowCellular)
     }
     private func beginBackgroundTime() {
         guard backgroundTask == .invalid else { return }
@@ -292,12 +312,26 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
             else { self.retries += 1; if self.retries < 6 { self.next() } else { self.fail(MossError.model("The download ended early. Tap Download to resume.")) } }
         }
     }
+    /// Runs on the io queue: converts the verified Kromoss checkpoint for the iPhone, then deletes the original.
+    private func convert(_ file: ModelFile, in folder: URL) throws {
+        DispatchQueue.main.async { self.converting = 0; self.message = "Preparing Kromoss for iPhone" }
+        defer { DispatchQueue.main.async { self.converting = nil } }
+        let source = folder.appendingPathComponent(file.path)
+        try KromossConverter.convert(source: source, into: folder.appendingPathComponent("kromoss"), sourceSHA: file.sha256) { done, total in
+            DispatchQueue.main.async { self.converting = Double(done) / Double(total) }
+        }
+        try? FileManager.default.removeItem(at: source)
+    }
     private func adoptExisting(_ file: ModelFile) {
         let destinationFolder = folder, path = file.path
         pendingVerification += 1; checkingPath = path; message = "Checking \(path)"
         io.async {
-            let ok = (try? Self.valid(file,in:destinationFolder)) ?? false
+            var ok = (try? Self.valid(file,in:destinationFolder)) ?? false
             if ok { Self.remember(path,folder:destinationFolder) } else { try? FileManager.default.removeItem(at:destinationFolder.appendingPathComponent(path)) }
+            if ok && file.convertsOnDevice {
+                do { try self.convert(file, in: destinationFolder) }
+                catch { ok = false; DispatchQueue.main.async { self.error = error.localizedDescription } }
+            }
             DispatchQueue.main.async {
                 self.pendingVerification -= 1; self.checkingPath = nil
                 if ok { self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths"); self.queue.removeAll { $0.path == path } }
@@ -319,6 +353,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
                 if FileManager.default.fileExists(atPath:destination.path) { _ = try FileManager.default.replaceItemAt(destination,withItemAt:part) }
                 else { try FileManager.default.moveItem(at:part,to:destination) }
                 Self.remember(path,folder:destinationFolder)
+                if file.convertsOnDevice { try self.convert(file, in: destinationFolder) }
                 DispatchQueue.main.async {
                     self.pendingVerification -= 1; self.checkingPath = nil
                     self.completed.insert(path); UserDefaults.standard.set(Array(self.completed),forKey:"verifiedPaths")
@@ -406,6 +441,7 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
                 if FileManager.default.fileExists(atPath:path.path) { try FileManager.default.removeItem(at:path) }
                 try? FileManager.default.removeItem(at:partURL(file))
             }
+            try? FileManager.default.removeItem(at:folder.appendingPathComponent("kromoss"))
             completed = []; UserDefaults.standard.removeObject(forKey:"verifiedPaths"); refreshStatus(); refreshSpace()
         } catch { self.error = "Some files could not be deleted: \(error.localizedDescription)" }
     }
@@ -423,13 +459,14 @@ final class ModelManager: NSObject, ObservableObject, URLSessionDataDelegate {
 }
 
 extension ModelManager {
-    enum FileState: Equatable { case done, downloading(Int64), checking, queued(Int64), missing(Int64) }
+    enum FileState: Equatable { case done, downloading(Int64), checking, converting(Double), queued(Int64), missing(Int64) }
     /// Display state of one manifest file for the download list.
     func state(of file: ModelFile) -> FileState {
         if completedPaths.contains(file.path) { return .done }
+        if file.convertsOnDevice, let converting { return .converting(converting) }
         if checkingPath == file.path { return .checking }
         if currentPath == file.path { return .downloading(currentReceived) }
         let partial = partialBytes(file)
-        return downloading && (!file.optional || wantedFast) ? .queued(partial) : .missing(partial)
+        return downloading && wanted(file) ? .queued(partial) : .missing(partial)
     }
 }

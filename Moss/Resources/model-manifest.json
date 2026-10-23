@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "identity": "moss-base8-text6-v1",
-  "name": "MOSS Base \u00b7 8-bit image model / 6-bit text encoder",
+  "identity": "moss-v2",
+  "name": "MOSS-Image \u00b7 8-bit image model / 6-bit text encoder \u00b7 DMD2 Fast \u00b7 optional Kromoss",
   "files": [
     {
       "path": "tokenizer/chat_template.jinja",
@@ -95,11 +95,18 @@
       "component": "text"
     },
     {
-      "path": "adapter/lora.safetensors",
-      "url": "https://huggingface.co/lodestones/MOSS-Image-Base-8-steps-dmd/resolve/da05cb3b52899179e2bb5f7efe1058fefcbae21b/lora.safetensors",
+      "path": "adapter/dmd2.safetensors",
+      "url": "https://huggingface.co/lodestones/Kromoss/resolve/7f9bb7b06d7b6c27d294b0bab5a2b3056c379279/8-steps-dmd2-lora.safetensors",
       "bytes": 1189176800,
-      "sha256": "f0e6cd07f222dfaea798afe3b796e2c2995cadfd44ad56e02ca616f0467aec28",
+      "sha256": "7683fe1fb51f73f5d690f24dd6b7f46f31ab9a9873729a854ac5c9a420ffe6f2",
       "component": "adapter"
+    },
+    {
+      "path": "kromoss/kromoss_bf16.safetensors",
+      "url": "https://huggingface.co/lodestones/Kromoss/resolve/7f9bb7b06d7b6c27d294b0bab5a2b3056c379279/diffusion_models/kromoss_bf16.safetensors",
+      "bytes": 10164655808,
+      "sha256": "54c863b9392f7b6a02f557d32a416b22765b4ffbee322ade9945e379f09adaba",
+      "component": "kromoss"
     }
   ]
 }

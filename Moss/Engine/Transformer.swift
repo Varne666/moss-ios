@@ -17,17 +17,17 @@ final class MossTransformer {
     static let layerCount = 42, heads = 24, headDim = 128, hidden = 3072, ffn = 8192, latentChannels = 128
 
     let store: TensorStore
-    let adapter: TensorStore?
+    let loras: [LoRAFile]
     let control: RunControl
     private let base: Weights
     /// Blocks kept in memory between steps. After the first step, cached blocks cost no storage reads, which
     /// is most of a step's time on iPhone. Filled up to `cacheBudget` bytes; emptied on a memory warning.
-    private var cache: [Int: (Weights, Weights?)] = [:]
+    private var cache: [Int: (Weights, [[String: LoRADelta]])] = [:]
     private var cachedBytes: Int64 = 0
     private var cacheBudget: Int64
 
-    init(store: TensorStore, adapter: TensorStore?, control: RunControl, cacheBudget: Int64 = 0) throws {
-        self.store = store; self.adapter = adapter; self.control = control; self.cacheBudget = cacheBudget
+    init(store: TensorStore, loras: [LoRAFile] = [], control: RunControl, cacheBudget: Int64 = 0) throws {
+        self.store = store; self.loras = loras; self.control = control; self.cacheBudget = cacheBudget
         base = try store.load(prefix: "", excluding: "layers.")
         try Self.checkLayout(store)
     }
@@ -121,22 +121,22 @@ final class MossTransformer {
         return Branch(text: text, rope: r, skipped: skipped)
     }
 
-    private func block(_ x: MLXArray, _ w: Weights, _ a: Weights?, _ rope: (MLXArray, MLXArray), _ mod: MLXArray) throws -> MLXArray {
+    private func block(_ x: MLXArray, _ w: Weights, _ a: [[String: LoRADelta]], _ rope: (MLXArray, MLXArray), _ mod: MLXArray) throws -> MLXArray {
         let y = try w.norm(x, "norm1") * (1 + mod[0..., 1..<2, 0...]) + mod[0..., 0..<1, 0...]
-        let q = try headNorm(w.linear(y, "proj.q", bits: 8, adapter: a), w, "q_norm")
-        let k = try headNorm(w.linear(y, "proj.k", bits: 8, adapter: a), w, "k_norm")
-        let v = try w.linear(y, "proj.v", bits: 8, adapter: a)
-        let h = try x + w.linear(attention(q, k, v, rope), "proj.o", bits: 8, adapter: a) * mod[0..., 2..<3, 0...]
+        let q = try headNorm(w.linear(y, "proj.q", bits: 8, loras: a), w, "q_norm")
+        let k = try headNorm(w.linear(y, "proj.k", bits: 8, loras: a), w, "k_norm")
+        let v = try w.linear(y, "proj.v", bits: 8, loras: a)
+        let h = try x + w.linear(attention(q, k, v, rope), "proj.o", bits: 8, loras: a) * mod[0..., 2..<3, 0...]
         let z = try w.norm(h, "norm2") * (1 + mod[0..., 4..<5, 0...]) + mod[0..., 3..<4, 0...]
-        let hg = try w.linear(z, "proj.ffn_up_gate", bits: 8, adapter: a)
-        return try h + w.linear(mossSitu(hg[0..., 0..., 0..<Self.ffn], hg[0..., 0..., Self.ffn..<(2 * Self.ffn)]), "proj.ffn_down", bits: 8, adapter: a) * mod[0..., 5..<6, 0...]
+        let hg = try w.linear(z, "proj.ffn_up_gate", bits: 8, loras: a)
+        return try h + w.linear(mossSitu(hg[0..., 0..., 0..<Self.ffn], hg[0..., 0..., Self.ffn..<(2 * Self.ffn)]), "proj.ffn_down", bits: 8, loras: a) * mod[0..., 5..<6, 0...]
     }
 
-    private func layer(_ i: Int) throws -> (Weights, Weights?) {
+    private func layer(_ i: Int) throws -> (Weights, [[String: LoRADelta]]) {
         if let hit = cache[i] { return hit }
         let w = try store.load(prefix: "layers.\(i).")
-        let a = try adapter?.load(prefix: "diffusion_model.layers.\(i).")
-        let bytes = Int64(w.values.values.reduce(0) { $0 + $1.nbytes } + (a?.values.values.reduce(0) { $0 + $1.nbytes } ?? 0))
+        let a = try loras.map { try $0.deltas(layer: i) }
+        let bytes = Int64(w.values.values.reduce(0) { $0 + $1.nbytes } + a.reduce(0) { $0 + $1.values.reduce(0) { $0 + $1.down.nbytes + $1.up.nbytes } })
         if cachedBytes + bytes <= cacheBudget { cache[i] = (w, a); cachedBytes += bytes }
         return (w, a)
     }

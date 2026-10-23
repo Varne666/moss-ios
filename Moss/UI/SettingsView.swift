@@ -8,30 +8,21 @@ struct ModelControls: View {
     @State private var action = "choose"
     @State private var confirmCellular = false
     @State private var confirmDelete = false
-    @State private var includeFast = true
     @State private var manifestURL = ""
     @State private var advanced = false
     var body: some View {
         VStack(alignment:.leading,spacing:16) {
-            Text(models.message).font(.headline)
-            LabeledContent("Model download",value:AppPaths.bytes(models.totalBytes))
-            LabeledContent("Fast adapter",value:AppPaths.bytes(models.adapterBytes))
+            NavigationLink {
+                ZStack { Theme.canvas.ignoresSafeArea(); ScrollView { SetupView().padding(16) } }
+                    .navigationTitle("Models").navigationBarTitleDisplayMode(.inline)
+            } label: {
+                LabeledContent("Models and downloads") {
+                    Text(models.kromossReady ? "Base · Kromoss · Fast" : models.fastReady ? "Base · Fast" : models.ready ? "Base" : "Not downloaded").foregroundStyle(.secondary)
+                }
+            }
             LabeledContent("Free space",value:AppPaths.bytes(models.freeBytes))
             Text(models.folder == AppPaths.models ? "Stored inside Moss" : "Folder: \(models.folder.lastPathComponent)").font(.callout).foregroundStyle(.secondary)
-            if models.busy {
-                ProgressView(value:models.fraction)
-                if models.downloading {
-                    Text("\(Int(models.fraction*100))% of current file · \(AppPaths.bytes(Int64(models.bytesPerSecond)))/s").font(.caption).monospacedDigit()
-                    if let seconds = models.remainingSeconds { Text("About \(durationText(seconds)) left for this file").font(.caption).foregroundStyle(.secondary) }
-                    Button("Pause download") { models.pause() }.buttonStyle(.bordered)
-                }
-            } else {
-                Toggle("Include Fast adapter",isOn:$includeFast)
-                Button(models.ready ? (models.fastReady ? "Check for missing files" : "Download Fast adapter") : "Download") {
-                    if models.ready { includeFast = true }
-                    if models.cellular { confirmCellular = true } else { models.download(includeFast:models.ready || includeFast) }
-                }.buttonStyle(.borderedProminent).controlSize(.large).disabled(app.running)
-                if models.cellular { Label("You are on cellular or a metered connection.",systemImage:"antenna.radiowaves.left.and.right").font(.caption).foregroundStyle(.orange) }
+            if !models.busy {
                 Menu("Choose storage or import files") {
                     Button("Use a folder in Files") { action = "choose"; showFolder = true }
                     Button("Use storage inside Moss") { models.useAppFolder() }
@@ -57,7 +48,7 @@ struct ModelControls: View {
             } catch { if (error as NSError).code != NSUserCancelledError { models.error = error.localizedDescription } }
         }
         .confirmationDialog("Download using cellular data?",isPresented:$confirmCellular,titleVisibility:.visible) {
-            Button("Download using cellular") { models.download(includeFast:models.ready || includeFast,allowCellular:true) }
+            Button("Download using cellular") { models.download(includeFast:true,allowCellular:true) }
             Button("Cancel",role:.cancel) {}
         } message: { Text("The complete model is about 12.1 GB, plus 1.2 GB for Fast. Your carrier may charge for this data.") }
         .confirmationDialog("Delete downloaded model files?",isPresented:$confirmDelete,titleVisibility:.visible) {

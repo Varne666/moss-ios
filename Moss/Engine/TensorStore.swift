@@ -33,6 +33,10 @@ final class TensorStore {
             }
         }
     }
+    func shape(_ name: String) throws -> [Int] {
+        guard let e = entries[name] else { throw MossError.model("The model is missing \(name).") }
+        return e.shape
+    }
     func read(_ name: String, row: Int? = nil) throws -> MLXArray {
         guard let e = entries[name] else { throw MossError.model("The model is missing \(name). Re-download it.") }
         var shape = e.shape, offset = e.offset, count = e.count
@@ -60,17 +64,20 @@ struct Weights {
     func get(_ name: String) throws -> MLXArray {
         guard let w = values[name] else { throw MossError.model("Missing model weight: \(name).") }; return w
     }
-    func linear(_ x: MLXArray, _ path: String, bits: Int, adapter: Weights? = nil) throws -> MLXArray {
+    func linear(_ x: MLXArray, _ path: String, bits: Int, loras: [[String: LoRADelta]] = []) throws -> MLXArray {
         let w = try get(path + ".weight")
         var y: MLXArray
         if let scales = values[path + ".scales"] {
             y = quantizedMM(x, w, scales: scales, biases: values[path + ".biases"], groupSize: 64, bits: bits)
         } else { y = matmul(x.asType(w.dtype), w.T) }
         if let bias = values[path + ".bias"] { y = y + bias }
-        if let adapter, let down = adapter.values[path + ".lora_down.weight"], let up = adapter.values[path + ".lora_up.weight"] {
-            let alpha = adapter.values[path + ".alpha"]?.item(Float.self) ?? Float(down.shape[0])
-            let delta = matmul(matmul(x.asType(.float32), down.T), up.T) * (alpha / Float(down.shape[0]))
-            y = y + delta.asType(y.dtype)
+        if !loras.isEmpty {
+            let xf = x.asType(.float32)
+            for set in loras {
+                guard let d = set[path] else { continue }
+                let delta = matmul(matmul(xf, d.down.asType(.float32).T), d.up.asType(.float32).T) * d.scale
+                y = y + delta.asType(y.dtype)
+            }
         }
         return y
     }

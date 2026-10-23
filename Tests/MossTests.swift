@@ -85,4 +85,26 @@ final class MossTests: XCTestCase {
         fast2.record(.init(stage:.encode,index:0,total:32,message:""),at:0)
         XCTAssertNotNil(fast2.remaining(at:1))
     }
+    func testLoRAKeyLayouts() {
+        XCTAssertEqual(LoRAFile.parse("diffusion_model.layers.3.proj.q.lora_down.weight")?.0, 3)
+        XCTAssertEqual(LoRAFile.parse("diffusion_model.layers.3.proj.q.lora_down.weight")?.2, "down")
+        XCTAssertEqual(LoRAFile.parse("transformer.layers.41.proj.ffn_up_gate.lora_B.weight")?.1, "ffn_up_gate")
+        XCTAssertEqual(LoRAFile.parse("transformer.layers.41.proj.ffn_up_gate.lora_B.weight")?.2, "up")
+        XCTAssertEqual(LoRAFile.parse("layers.0.proj.qkv.alpha")?.2, "alpha")
+        XCTAssertEqual(LoRAFile.parse("lora_unet_layers_12_proj_ffn_down.lora_up.weight")?.0, 12)
+        XCTAssertEqual(LoRAFile.parse("lora_unet_layers_12_proj_ffn_down.lora_up.weight")?.1, "ffn_down")
+        XCTAssertNil(LoRAFile.parse("diffusion_model.text_embedder.blocks.0.qkv.lora_down.weight"))
+        XCTAssertNil(LoRAFile.parse("diffusion_model.layers.3.norm1.weight"))
+    }
+    func testOldGalleryRecordsStillDecode() throws {
+        let old = #"{"prompt":"a cat","negativePrompt":"","width":512,"height":512,"quality":"Balanced","steps":20,"guidance":3,"shift":5,"skipLayer":true,"seed":7,"lockedSeed":false,"count":1}"#
+        let s = try JSONDecoder().decode(GenerationSettings.self, from: Data(old.utf8))
+        XCTAssertEqual(s.width, 512); XCTAssertEqual(s.model, .base); XCTAssertTrue(s.loras.isEmpty); XCTAssertFalse(s.snapshotStyle)
+        var snap = s; snap.snapshotStyle = true
+        XCTAssertTrue(snap.effectivePrompt.hasPrefix(SnapshotStyle.prefix)); XCTAssertTrue(snap.effectivePrompt.contains("a cat"))
+        XCTAssertEqual(s.effectivePrompt, "a cat")
+    }
+    func testLoRANames() {
+        XCTAssertEqual(LoRAStore.friendlyName("MOSSRealisticSnapshotV1_3311349"), "Realistic Snapshot V1")
+    }
 }

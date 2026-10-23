@@ -45,6 +45,6 @@ import SwiftUI
         try render("setup-downloading", SetupView().environmentObject(models).environmentObject(app).environmentObject(gallery), width: 390, dark: true)
         models.downloading = false; models.busy = false; models.currentPath = nil; models.ready = true
         app.settings.prompt = "A cozy reading nook by a rainy window, warm lamp light"
-        try render("create-ready", GeneratorView().environmentObject(models).environmentObject(app).environmentObject(gallery).frame(height: 780), width: 390, dark: true)
+        try render("create-ready", GeneratorView().environmentObject(models).environmentObject(app).environmentObject(gallery).environmentObject(app.loras).frame(height: 780), width: 390, dark: true)
     }
 }

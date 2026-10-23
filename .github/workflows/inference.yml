@@ -19,7 +19,7 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_ENV"
           import json
           r = json.load(open('ci/inference.json'))
-          for k, v in {'prompt': 'A red fox sitting in fresh snow, golden hour, photograph', 'width': '256', 'height': '256', 'preset': 'best', 'steps': '', 'seed': '42', 'label': 'check', 'extra': '', 'cache_mb': ''}.items():
+          for k, v in {'prompt': 'A red fox sitting in fresh snow, golden hour, photograph', 'width': '256', 'height': '256', 'preset': 'best', 'steps': '', 'seed': '42', 'label': 'check', 'extra': '', 'cache_mb': '', 'kromoss': ''}.items():
               print(f"REQ_{k.upper()}={str(r.get(k, v)).replace(chr(10), ' ')}")
           PY
       - name: Machine
@@ -39,7 +39,13 @@ jobs:
       - name: Download real weights
         run: |
           ADAPTER=""; [ "${{ env.REQ_PRESET }}" = "fast" ] && ADAPTER="--adapter"
-          python3 scripts/download_models.py "$RUNNER_TEMP/models" $ADAPTER 2>&1 | tee out/download.log
+          KROMOSS=""; [ -n "${{ env.REQ_KROMOSS }}" ] && KROMOSS="--kromoss"
+          python3 scripts/download_models.py "$RUNNER_TEMP/models" $ADAPTER $KROMOSS 2>&1 | tee out/download.log
+          if [ -n "$KROMOSS" ]; then
+            /usr/bin/time -l build/DD/Build/Products/Release/MossCLI --convert-kromoss "$RUNNER_TEMP/models/kromoss/kromoss_bf16.safetensors" \
+              --models "$RUNNER_TEMP/models" --manifest Moss/Resources/model-manifest.json 2>&1 | tee out/convert.log
+            rm -f "$RUNNER_TEMP/models/kromoss/kromoss_bf16.safetensors"; ls -la "$RUNNER_TEMP/models/kromoss" | tee -a out/convert.log
+          fi
           df -h / | tee -a out/download.log
           python3 scripts/inspect_checkpoint.py "$RUNNER_TEMP/models" > out/checkpoint.txt 2>&1 || true
       - name: Generate

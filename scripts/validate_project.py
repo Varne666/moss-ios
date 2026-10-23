@@ -12,8 +12,9 @@ for f in manifest['files']:
  assert re.fullmatch(r'[a-f0-9]{64}',f['sha256'])
  assert f['bytes']>0 and f['url'].startswith('https://huggingface.co/')
  assert '/resolve/' in f['url'] and re.search(r'/resolve/[a-f0-9]{40}/',f['url'])
-assert sum(f['bytes'] for f in manifest['files'] if f['component']!='adapter')==12075713035
+assert sum(f['bytes'] for f in manifest['files'] if f['component'] not in ('adapter','kromoss'))==12075713035
 assert sum(f['bytes'] for f in manifest['files'] if f['component']=='adapter')==1189176800
+assert sum(f['bytes'] for f in manifest['files'] if f['component']=='kromoss')==10164655808
 assert len([f for f in manifest['files'] if f['component']=='transformer' and f['path'].endswith('.safetensors')])==2
 assert len([f for f in manifest['files'] if f['component']=='text' and f['path'].endswith('.safetensors')])==2
 asset=root/'Moss/Assets.xcassets/AppIcon.appiconset'

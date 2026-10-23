@@ -8,9 +8,12 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 dest = Path(sys.argv[1])
 want_adapter = "--adapter" in sys.argv
+want_kromoss = "--kromoss" in sys.argv
 manifest = json.loads((root / "Moss/Resources/model-manifest.json").read_text())
 for f in manifest["files"]:
     if f["component"] == "adapter" and not want_adapter:
+        continue
+    if f["component"] == "kromoss" and not want_kromoss:
         continue
     target = dest / f["path"]
     target.parent.mkdir(parents=True, exist_ok=True)

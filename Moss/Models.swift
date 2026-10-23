@@ -17,6 +17,19 @@ enum Quality: String, Codable, CaseIterable, Identifiable {
     case fast = "Fast", balanced = "Balanced", best = "Best"
     var id: String { rawValue }
 }
+enum ImageModel: String, Codable, CaseIterable, Identifiable {
+    case base = "MOSS Base", kromoss = "Kromoss"
+    var id: String { rawValue }
+}
+/// A user LoRA turned on for a generation.
+struct LoRAChoice: Codable, Equatable, Hashable { var id: String; var name: String; var strength: Float }
+
+/// Wording from the Realistic Snapshot MOSS-Image workflow: casual, natural iPhone-photo look.
+enum SnapshotStyle {
+    static let prefix = "amateur photo, candid photorealistic photo. sharp, clear and detailed iphone photo, 4k, high resolution"
+    static let suffix = "natural iphone photo, natural color grading, authentic smartphone photo aesthetic, high detail, 12MP iPhone camera look, 2017-2018 mobile photography quality."
+}
+
 struct GenerationSettings: Codable, Equatable {
     var prompt = ""
     var negativePrompt = ""
@@ -30,6 +43,26 @@ struct GenerationSettings: Codable, Equatable {
     var seed: UInt32 = 42
     var lockedSeed = false
     var count = 1
+    var model: ImageModel = .base
+    var loras: [LoRAChoice] = []
+    var snapshotStyle = false
+
+    init() {}
+    /// Older gallery records lack the newer fields; they decode with defaults.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback }
+        prompt = value(.prompt, ""); negativePrompt = value(.negativePrompt, "")
+        width = value(.width, 1024); height = value(.height, 1024); quality = value(.quality, .fast)
+        steps = value(.steps, 8); guidance = value(.guidance, 1); shift = value(.shift, 5); skipLayer = value(.skipLayer, true)
+        seed = value(.seed, 42); lockedSeed = value(.lockedSeed, false); count = value(.count, 1)
+        model = value(.model, .base); loras = value(.loras, []); snapshotStyle = value(.snapshotStyle, false)
+    }
+    /// What the text encoder actually reads: the prompt, wrapped in the snapshot wording when that style is on.
+    var effectivePrompt: String {
+        guard snapshotStyle else { return prompt }
+        return SnapshotStyle.prefix + "\n\n" + prompt.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + SnapshotStyle.suffix
+    }
     mutating func preset(_ q: Quality) {
         quality = q; shift = 5; skipLayer = true
         steps = q == .fast ? 8 : q == .best ? 50 : 30
@@ -68,7 +101,9 @@ struct ModelFile: Codable, Identifiable {
     let sha256: String
     let component: String
     var id: String { path }
-    var optional: Bool { component == "adapter" }
+    var optional: Bool { component == "adapter" || component == "kromoss" }
+    /// Downloaded once, converted on the iPhone, then deleted (only the converted files stay).
+    var convertsOnDevice: Bool { component == "kromoss" }
 }
 struct ModelManifest: Codable {
     let format: Int
@@ -77,7 +112,7 @@ struct ModelManifest: Codable {
     let files: [ModelFile]
     var requiredBytes: Int64 { files.filter { !$0.optional }.reduce(0) { $0+$1.bytes } }
     func validate() throws {
-        guard format == 1, identity == "moss-base8-text6-v1", !files.isEmpty, files.count < 40,
+        guard format == 1, identity == "moss-v2", !files.isEmpty, files.count < 40,
               Set(files.map(\.path)).count == files.count else { throw MossError.model("This model list is incompatible with Moss. Use the supplied manifest or its exact mirror.") }
         let reference = try Self.bundled()
         guard files.count == reference.files.count else { throw MossError.model("The model list is incomplete.") }

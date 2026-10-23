@@ -11,7 +11,9 @@ struct GenerationProgress: Equatable {
     var message: String
 }
 final class MossPipeline {
+    /// `userLoRAs`: extra LoRA files (for example Realistic Snapshot) with their strengths.
     func generate(settings s: GenerationSettings, folder: URL, manifest: ModelManifest, control: RunControl,
+                  userLoRAs: [(url: URL, name: String, strength: Float)] = [],
                   progress: @escaping (GenerationProgress) -> Void) throws -> CGImage {
         try s.validate(); try control.check()
         Memory.cacheLimit = 64 * 1024 * 1024
@@ -26,7 +28,7 @@ final class MossPipeline {
         progress(.init(stage:.encode,index:0,total:32,message:"Reading your prompt"))
         let contexts: (MLXArray,MLXArray?) = try autoreleasepool {
             let tokenizer = try MossTokenizer(url:folder.appendingPathComponent("tokenizer/tokenizer.json"))
-            let positive = try tokenizer.encode(s.prompt)
+            let positive = try tokenizer.encode(s.effectivePrompt)
             let negative = s.guidance != 1 ? try tokenizer.encode(s.negativePrompt) : nil
             // Long prompts need proportionally more activations even with streamed weights.
             guard positive.count <= 1024, (negative?.count ?? 0) <= 1024 else {
@@ -42,8 +44,21 @@ final class MossPipeline {
         var latent = MLXArray(noise.normal(count:128*h*w),[1,128,h,w]); eval(latent)
         let schedule = MossSchedule.sigmas(steps:s.steps,shift:s.shift)
         try autoreleasepool {
-            let adapter = s.quality == .fast ? try store("adapter") : nil
-            let transformer = try MossTransformer(store:store("transformer"),adapter:adapter,control:control,cacheBudget:control.layerCacheBudget(pixels:s.width*s.height))
+            var loras: [LoRAFile] = []
+            if s.quality == .fast {
+                guard let file = manifest.files.first(where: { $0.component == "adapter" }) else { throw MossError.model("The Fast add-on is missing.") }
+                loras.append(try LoRAFile(url: folder.appendingPathComponent(file.path), name: "Fast (DMD2)", strength: 1))
+            }
+            for extra in userLoRAs { loras.append(try LoRAFile(url: extra.url, name: extra.name, strength: extra.strength)) }
+            let imageStore: TensorStore
+            if s.model == .kromoss {
+                guard let source = manifest.files.first(where: { $0.component == "kromoss" }),
+                      let urls = KromossConverter.converted(in: folder.appendingPathComponent("kromoss"), sourceSHA: source.sha256) else {
+                    throw MossError.model("Download the Kromoss realism model in Settings first, or switch the model to MOSS Base.")
+                }
+                imageStore = try TensorStore(files: urls)
+            } else { imageStore = try store("transformer") }
+            let transformer = try MossTransformer(store:imageStore,loras:loras,control:control,cacheBudget:control.layerCacheBudget(pixels:s.width*s.height))
             progress(.init(stage:.prepare,index:0,total:1,message:"Preparing the image model"))
             var branches = [try transformer.prepare(context:contexts.0,height:h,width:w,skipped:[])]
             if let negative = contexts.1 {

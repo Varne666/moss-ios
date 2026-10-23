@@ -4,6 +4,7 @@ struct RootView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var gallery: GalleryStore
+    @EnvironmentObject var loras: LoRAStore
     var body: some View {
         TabView(selection:$app.tab) {
             NavigationStack { GeneratorView() }.tabItem { Label("Create",systemImage:"leaf") }.tag(0)
@@ -12,9 +13,9 @@ struct RootView: View {
         }
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
-        .alert("Moss",isPresented:Binding(get:{app.error != nil || models.error != nil || gallery.error != nil},set:{ if !$0 { app.error = nil; models.error = nil; gallery.error = nil } })) {
-            Button("OK",role:.cancel) { app.error = nil; models.error = nil; gallery.error = nil }
-        } message: { Text(app.error ?? models.error ?? gallery.error ?? "") }
+        .alert("Moss",isPresented:Binding(get:{app.error != nil || models.error != nil || gallery.error != nil || loras.error != nil},set:{ if !$0 { app.error = nil; models.error = nil; gallery.error = nil; loras.error = nil } })) {
+            Button("OK",role:.cancel) { app.error = nil; models.error = nil; gallery.error = nil; loras.error = nil }
+        } message: { Text(app.error ?? models.error ?? gallery.error ?? loras.error ?? "") }
     }
 }
 struct MossCard<Content: View>: View {
