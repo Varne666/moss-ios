@@ -1,0 +1,22 @@
+name: Inspect remote checkpoints
+on:
+  push:
+    branches: [inspect]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Headers
+        run: |
+          mkdir -p out
+          python3 scripts/remote_headers.py $(cat ci/urls.txt) 2>&1 | tee out/headers.txt
+      - name: Publish
+        if: always()
+        run: |
+          OUT=$RUNNER_TEMP/pub; mkdir -p "$OUT"; cp out/* "$OUT/"; cd "$OUT"
+          git init -q -b inspect-output; git config user.name moss-ci; git config user.email moss-ci@users.noreply.github.com
+          git add -A; git commit -qm "inspect ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" HEAD:inspect-output
