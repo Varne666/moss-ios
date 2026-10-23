@@ -1,0 +1,10 @@
+converted 6/43  12s  footprint=0.61 GiB
+converted 12/43  16s  footprint=0.61 GiB
+converted 18/43  19s  footprint=0.61 GiB
+converted 24/43  22s  footprint=0.61 GiB
+converted 30/43  25s  footprint=0.61 GiB
+converted 36/43  28s  footprint=0.61 GiB
+converted 42/43  31s  footprint=0.61 GiB
+converted 43/43  32s  footprint=0.61 GiB
+CONVERTED in 32s, peak footprint 1.45 GiB
+-rw-r--r--   1 runner  staff       1502 Oct 23 21:34 converted.json
