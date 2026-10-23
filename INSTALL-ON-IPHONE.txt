@@ -18,10 +18,15 @@ REALISM (Kromoss + Realistic Snapshot)
 - Settings -> Models: turn on "Include Kromoss realism model" and tap Download
   selected (10.2 GB). Moss prepares it for the iPhone once and deletes the
   original, keeping 5.6 GB.
-- Realistic Snapshot LoRA: in Safari open civitai.com/models/2268008, sign in,
-  download the MOSS-Image version. In Moss tap the Style chip -> Import LoRA and
-  pick the file. Then tap "Realistic Snapshot recipe".
+- Realistic Snapshot LoRA (Civitai needs an account): on civitai.com open
+  Account settings -> API Keys -> Add API key and copy it. In Moss tap the
+  Style chip, paste the key, tap Download Realistic Snapshot (580 MB, checked
+  against Civitai's checksum). The key stays in your iPhone's Keychain.
+  Or download the file in Safari and tap Import LoRA. Then tap
+  "Realistic Snapshot recipe".
 
+If something stalls, open Settings -> Diagnostics: it logs every step with the
+time, and can be copied or shared.
 If Moss closes while generating, reopen it (it explains what happened), close
 other apps, let the phone cool, and try again or pick a smaller size.
 Do not uninstall Moss to troubleshoot: that deletes its downloaded model and

@@ -1,4 +1,4 @@
-# Validation status — 21 October 2026
+# Validation status — 23 October 2026 (1.0.3)
 
 ## Done, with evidence
 
@@ -26,7 +26,9 @@
 
 | `Validation/mac-kromoss-dmd2-snapshot-768x1360.png` | 768×1360, Kromoss (converted on device from lodestones/Kromoss bf16) + DMD2 Fast (8 steps, CFG 1, shift 5) + snapshot wording, seed 21 | Correct, photoreal phone-snapshot image | 641 s (~67 s/step) | 2.68 GiB (sampled); 2.90 GB (`time -l`) |
 
-Kromoss on-device conversion (`KromossConverter`, run through `MossCLI --convert-kromoss` on the same VM): 43 groups in 32 s, peak footprint 1.45 GiB (`Validation/mac-kromoss-convert.log`). The Realistic Snapshot LoRA itself could not be tested here: Civitai refuses downloads without a signed-in account (HTTP 401). The LoRA loader was exercised with the DMD2 LoRA and unit-tested on the other key layouts.
+1.0.3: conversion now runs on the CPU (iOS rejects GPU work from background apps): 43 groups in 36 s, peak 1.44 GiB; a Kromoss + DMD2 + snapshot 768×1360 image from those weights finished in 546 s at 2.70 GiB and is correct (`Validation/mac-kromoss-cpu-convert-768x1360.png`). Simulator tests: 13 of 13 pass, including a regression test for the countdown standing still before the first milestone.
+
+Kromoss on-device conversion (`KromossConverter`, run through `MossCLI --convert-kromoss` on the same VM): 43 groups in 32 s, peak footprint 1.45 GiB (`Validation/mac-kromoss-convert.log`). The Realistic Snapshot LoRA itself could not be tested here: Civitai refuses downloads without a signed-in account (HTTP 401). Its public metadata was read: `MOSSRealisticSnapshotV1.safetensors`, 580,458,124 bytes, bf16, SHA-256 67d6eca4…72bb4; the in-app download checks both. The LoRA loader was exercised with the DMD2 LoRA and unit-tested on the other key layouts.
 
 Layer-cache experiment (Fast 1024², 2.6 GB of transformer blocks kept in memory): image unchanged, steps no faster (~65 s vs ~61 s), peak footprint 4.85 GiB vs 2.70 GiB, so the cache is off by default.
 
