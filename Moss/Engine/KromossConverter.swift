@@ -56,7 +56,7 @@ enum KromossConverter {
                     }
                 }
                 eval(Array(out.values))
-                let file = group + ".safetensors", tmp = folder.appendingPathComponent(file + ".tmp")
+                let file = group + ".safetensors", tmp = folder.appendingPathComponent(group + ".partial.safetensors")
                 try save(arrays: out, metadata: ["format": "mlx"], url: tmp)
                 let final = folder.appendingPathComponent(file)
                 try? FileManager.default.removeItem(at: final)
